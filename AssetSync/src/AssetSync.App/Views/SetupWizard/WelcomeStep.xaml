@@ -1,0 +1,8 @@
+<UserControl x:Class="AssetSync.App.Views.SetupWizard.WelcomeStep"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Margin="16">
+        <TextBlock Text="Welcome to Asset Sync" FontSize="18" FontWeight="Bold" Margin="0,0,0,12"/>
+        <TextBlock Text="This wizard will guide you through connecting Snipe-IT, Intune, and Iru (Kandji). Snipe-IT is the source of truth; device data from MDM will be synced into Snipe-IT." TextWrapping="Wrap"/>
+    </StackPanel>
+</UserControl>

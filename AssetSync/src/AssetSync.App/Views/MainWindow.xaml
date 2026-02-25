@@ -1,0 +1,23 @@
+<Window x:Class="AssetSync.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Asset Sync" Height="600" Width="900"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="180"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Background="#f0f0f0" Padding="8">
+            <StackPanel>
+                <TextBlock Text="Asset Sync" FontSize="18" FontWeight="Bold" Margin="0,0,0,16"/>
+                <Button Content="Dashboard" Margin="0,0,0,4" Command="{Binding NavigateDashboardCommand}"/>
+                <Button Content="Settings" Margin="0,0,0,4" Command="{Binding NavigateSettingsCommand}"/>
+                <Button Content="Mappings" Margin="0,0,0,4" Command="{Binding NavigateMappingsCommand}"/>
+                <Button Content="Logs" Margin="0,0,0,4" Command="{Binding NavigateLogsCommand}"/>
+                <Button Content="Queues" Margin="0,0,0,4" Command="{Binding NavigateQueuesCommand}"/>
+            </StackPanel>
+        </Border>
+        <ContentControl Grid.Column="1" Content="{Binding CurrentView}" Margin="8"/>
+    </Grid>
+</Window>

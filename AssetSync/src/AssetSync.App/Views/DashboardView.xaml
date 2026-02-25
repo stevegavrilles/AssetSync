@@ -1,0 +1,14 @@
+<UserControl x:Class="AssetSync.App.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Margin="8">
+        <TextBlock Text="Dashboard" FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <Button Content="Sync Now" Command="{Binding SyncNowCommand}" Margin="0,0,8,0"/>
+            <Button Content="Dry Run" Command="{Binding DryRunCommand}" Margin="0,0,8,0"/>
+        </StackPanel>
+        <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+        <TextBlock Text="{Binding LastSyncText}" Margin="0,0,0,4"/>
+        <TextBlock Text="{Binding NextSyncText}" Margin="0,0,0,4"/>
+    </StackPanel>
+</UserControl>
