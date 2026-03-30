@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AssetSync.Core.Enums;
 using AssetSync.Core.Interfaces;
 using AssetSync.Core.Models;
@@ -20,6 +21,11 @@ public class SyncEngine : ISyncEngine
     private readonly ConflictResolver _resolver;
     private readonly BuildVersionMapper _buildMapper;
     private readonly ILogger<SyncEngine> _logger;
+
+    /// <summary>Matches a standard PM asset tag: PM followed by exactly 7 digits.</summary>
+    private static readonly Regex PmTagRegex = new(@"^PM\d{7}$", RegexOptions.IgnoreCase);
+    private static bool IsStandardTag(string? tag) =>
+        !string.IsNullOrEmpty(tag) && PmTagRegex.IsMatch(tag);
 
     public SyncEngine(
         IIntuneService intuneService,
@@ -126,6 +132,9 @@ public class SyncEngine : ISyncEngine
                     device.WindowsFeatureUpdate = await _buildMapper.GetFriendlyNameAsync(device.OsVersion, cancellationToken).ConfigureAwait(false);
                     var catMapping = await _mappingRepository.GetCategoryMappingAsync(device.DeviceType ?? "", cancellationToken).ConfigureAwait(false);
                     if (catMapping != null) device.SnipeItCategoryId = catMapping.SnipeItCategoryId;
+                    // Normalize MDM asset tag to uppercase before passing to create
+                    if (IsStandardTag(device.MdmAssetTag))
+                        device.MdmAssetTag = device.MdmAssetTag!.ToUpperInvariant();
                     if (!dryRun)
                     {
                         var created = await _snipeItService.CreateAssetAsync(device, cancellationToken).ConfigureAwait(false);
@@ -150,10 +159,23 @@ public class SyncEngine : ISyncEngine
                 }
 
                 var snipeAsset = existing[0];
-                var updates = _resolver.GetUpdatesToApply(snipeAsset, device);
+                var resolvedUpdates = _resolver.GetUpdatesToApply(snipeAsset, device);
                 var discrepancies = _resolver.GetDiscrepancies(snipeAsset, device);
                 foreach (var (field, snipeVal, mdmVal) in discrepancies)
                     await LogAsync(runId, LogLevel.Warning, SourceSystem.Application, "skip", device.SerialNumber, device.DeviceName, true, $"Discrepancy {field}: Snipe-IT={snipeVal} MDM={mdmVal}", cancellationToken).ConfigureAwait(false);
+
+                // Build a mutable copy so we can inject the asset tag if needed
+                var updates = new Dictionary<string, object?>(resolvedUpdates);
+
+                // If MDM has a valid PM-format asset tag and Snipe-IT's tag is missing or non-standard, push it in
+                if (IsStandardTag(device.MdmAssetTag) && !IsStandardTag(snipeAsset.SnipeItAssetTag))
+                {
+                    updates["asset_tag"] = device.MdmAssetTag!.ToUpperInvariant();
+                    await LogAsync(runId, LogLevel.Info, SourceSystem.Application, "asset_tag_push",
+                        device.SerialNumber, device.DeviceName, true,
+                        $"MDM asset tag '{device.MdmAssetTag}' → Snipe-IT (was: '{snipeAsset.SnipeItAssetTag ?? "none"}')",
+                        cancellationToken).ConfigureAwait(false);
+                }
 
                 if (updates.Count == 0)
                 {

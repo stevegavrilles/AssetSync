@@ -77,6 +77,9 @@ public class SnipeItService : ISnipeItService
             ["assigned_to"] = device.SnipeItAssignedUserId,
             ["category_id"] = device.SnipeItCategoryId
         };
+        // Include MDM asset tag in the create request if it's a valid PM-format tag
+        if (!string.IsNullOrEmpty(device.MdmAssetTag))
+            payload["asset_tag"] = device.MdmAssetTag;
         var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         var response = await SendWithRetryAsync(HttpMethod.Post, $"{_baseUrl}/api/v1/hardware", body, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) return null;

@@ -23,4 +23,6 @@ public class Device
     public string? AzureAdDeviceId { get; set; }
     public string? IruDeviceId { get; set; }
     public string? OperatingSystem { get; set; }
+    /// <summary>Asset tag as reported by the MDM platform (Intune Notes or Kandji asset_tag field).</summary>
+    public string? MdmAssetTag { get; set; }
 }

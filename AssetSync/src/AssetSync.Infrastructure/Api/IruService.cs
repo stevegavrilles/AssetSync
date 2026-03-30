@@ -60,6 +60,7 @@ public class IruService : IIruService
                 string? userEmail = null;
                 if (r.TryGetProperty("user", out var user) && user.ValueKind == JsonValueKind.Object && user.TryGetProperty("email", out var em))
                     userEmail = em.GetString();
+                var assetTag = r.TryGetProperty("asset_tag", out var at2) ? at2.GetString() : null;
                 list.Add(new Device
                 {
                     NormalizedSerial = SerialNumberNormalizer.Normalize(serial),
@@ -70,7 +71,8 @@ public class IruService : IIruService
                     OsVersion = osVersion,
                     PlatformSource = "Iru",
                     IruDeviceId = deviceId,
-                    DeviceType = r.TryGetProperty("device_family", out var df) ? df.GetString() : null
+                    DeviceType = r.TryGetProperty("device_family", out var df) ? df.GetString() : null,
+                    MdmAssetTag = string.IsNullOrWhiteSpace(assetTag) ? null : assetTag.Trim()
                 });
             }
 

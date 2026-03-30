@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AssetSync.Core.Interfaces;
 using AssetSync.Core.Services;
 using Device = AssetSync.Core.Models.Device;
@@ -11,6 +12,8 @@ namespace AssetSync.Infrastructure.Api;
 public class IntuneService : IIntuneService
 {
     private const int PageSize = 1000;
+    // Matches PM followed by exactly 7 digits anywhere in a string (e.g. Notes field)
+    private static readonly Regex PmTagRegex = new(@"\bPM\d{7}\b", RegexOptions.IgnoreCase);
     private readonly string _tenantId;
     private readonly string _clientId;
     private readonly string _clientSecret;
@@ -77,6 +80,13 @@ public class IntuneService : IIntuneService
         foreach (var m in page.Value)
         {
             var serial = m.SerialNumber ?? "";
+            // Extract a PM-format asset tag from the Notes field if present
+            string? mdmAssetTag = null;
+            if (!string.IsNullOrEmpty(m.Notes))
+            {
+                var match = PmTagRegex.Match(m.Notes);
+                if (match.Success) mdmAssetTag = match.Value.ToUpperInvariant();
+            }
             list.Add(new Device
             {
                 NormalizedSerial = SerialNumberNormalizer.Normalize(serial),
@@ -88,7 +98,8 @@ public class IntuneService : IIntuneService
                 DeviceType = m.DeviceCategoryDisplayName ?? m.ManagementAgent?.ToString(),
                 PlatformSource = "Intune",
                 AzureAdDeviceId = m.AzureADDeviceId,
-                OperatingSystem = m.OperatingSystem
+                OperatingSystem = m.OperatingSystem,
+                MdmAssetTag = mdmAssetTag
             });
         }
         return Task.CompletedTask;
