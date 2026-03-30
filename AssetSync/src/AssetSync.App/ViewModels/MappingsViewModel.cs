@@ -137,34 +137,31 @@ public partial class MappingsViewModel : ObservableObject
                 existingMappings.Select(m => m.MdmModelString),
                 StringComparer.OrdinalIgnoreCase);
 
-            // Group by model string, counting affected devices
-            var grouped = new Dictionary<string, (int Count, List<string> Devices)>(StringComparer.OrdinalIgnoreCase);
+            // Group by MDM model string only — never fall back to device name
+            var grouped = new Dictionary<string, (int Count, List<string> Serials)>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in pending)
             {
-                var model = entry.ErrorDetail;
-                if (model != null && model.StartsWith("Pending model mapping:"))
-                    model = model["Pending model mapping:".Length..].Trim();
-                else
-                    model = null;
+                // Only process entries that contain an actual model string
+                var detail = entry.ErrorDetail ?? "";
+                if (!detail.StartsWith("Pending model mapping:")) continue;
 
-                if (string.IsNullOrEmpty(model))
-                    model = entry.DeviceName ?? entry.SerialNumber;
-
+                var model = detail["Pending model mapping:".Length..].Trim();
                 if (string.IsNullOrEmpty(model) || mappedModels.Contains(model)) continue;
 
-                if (!grouped.TryGetValue(model, out var entry2))
-                    grouped[model] = (1, new List<string> { entry.DeviceName ?? entry.SerialNumber ?? "" });
-                else
-                    grouped[model] = (entry2.Count + 1, entry2.Devices);
+                if (!grouped.TryGetValue(model, out var grp))
+                    grouped[model] = (1, new List<string> { entry.SerialNumber ?? "" });
+                else if (!grp.Serials.Contains(entry.SerialNumber ?? ""))
+                    grouped[model] = (grp.Count + 1, grp.Serials);
             }
 
             PendingMappings.Clear();
-            foreach (var (model, (count, _)) in grouped.OrderBy(kvp => kvp.Key))
+            foreach (var (model, (count, serials)) in grouped.OrderBy(kvp => kvp.Key))
             {
                 PendingMappings.Add(new PendingMappingRow
                 {
                     MdmModel = model,
                     DeviceCount = count,
+                    ExampleSerials = string.Join(", ", serials.Take(3)),
                     StatusText = "Pending"
                 });
             }

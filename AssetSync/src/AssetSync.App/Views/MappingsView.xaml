@@ -48,20 +48,35 @@
 
                         <DataGrid.Columns>
 
-                            <!-- MDM Model String -->
-                            <DataGridTextColumn Header="MDM Model String"
+                            <!-- MDM Model String (from device hardware) -->
+                            <DataGridTextColumn Header="MDM Model (from device)"
                                                Binding="{Binding MdmModel}"
                                                Width="*" IsReadOnly="True">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="VerticalAlignment" Value="Center"/>
                                         <Setter Property="Padding" Value="4,0"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Example serials -->
+                            <DataGridTextColumn Header="Example Serial(s)"
+                                               Binding="{Binding ExampleSerials}"
+                                               Width="180" IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Setter Property="Padding" Value="4,0"/>
+                                        <Setter Property="Foreground" Value="#666"/>
+                                        <Setter Property="FontSize" Value="11"/>
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
 
                             <!-- Device Count -->
-                            <DataGridTextColumn Header="Devices"
+                            <DataGridTextColumn Header="# Devices"
                                                Binding="{Binding DeviceCount}"
                                                Width="70" IsReadOnly="True">
                                 <DataGridTextColumn.ElementStyle>
