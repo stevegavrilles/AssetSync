@@ -5,19 +5,104 @@
         <StackPanel Margin="8">
             <TextBlock Text="Settings" FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
             <TabControl>
+                <!-- Connections Tab -->
                 <TabItem Header="Connections">
                     <StackPanel Margin="8">
-                        <TextBlock Text="Snipe-IT URL" Margin="0,0,0,4"/>
-                        <TextBox Text="{Binding SnipeItUrl}" Margin="0,0,0,8"/>
-                        <TextBlock Text="Intune Tenant ID" Margin="0,0,0,4"/>
-                        <TextBox Text="{Binding IntuneTenantId}" Margin="0,0,0,8"/>
+                        <!-- Snipe-IT -->
+                        <GroupBox Header="Snipe-IT" Margin="0,0,0,12">
+                            <StackPanel Margin="8">
+                                <TextBlock Text="Base URL" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding SnipeItUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                                <TextBlock Text="API Key" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding SnipeItApiKey, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Test Connection" Command="{Binding TestSnipeItConnectionCommand}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding SnipeItConnectionStatus}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Intune -->
+                        <GroupBox Header="Microsoft Intune" Margin="0,0,0,12">
+                            <StackPanel Margin="8">
+                                <TextBlock Text="Tenant ID" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding IntuneTenantId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                                <TextBlock Text="Client ID (App Registration)" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding IntuneClientId, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                                <TextBlock Text="Client Secret" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding IntuneClientSecret, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Test Connection" Command="{Binding TestIntuneConnectionCommand}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding IntuneConnectionStatus}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Iru -->
+                        <GroupBox Header="Iru (Kandji)" Margin="0,0,0,12">
+                            <StackPanel Margin="8">
+                                <TextBlock Text="Base URL" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding IruBaseUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                                <TextBlock Text="API Token" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding IruApiToken, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Test Connection" Command="{Binding TestIruConnectionCommand}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding IruConnectionStatus}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
                     </StackPanel>
                 </TabItem>
-                <TabItem Header="Sync"/>
-                <TabItem Header="Write-Back"/>
-                <TabItem Header="Notifications"/>
-                <TabItem Header="Application"/>
+
+                <!-- Sync Tab -->
+                <TabItem Header="Sync">
+                    <StackPanel Margin="8">
+                        <TextBlock Text="Sync Interval (hours)" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding SyncIntervalHours, UpdateSourceTrigger=PropertyChanged}" Width="100" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+                        <CheckBox Content="Dry run by default" IsChecked="{Binding DryRunDefault}" Margin="0,0,0,8"/>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- Write-Back Tab -->
+                <TabItem Header="Write-Back">
+                    <StackPanel Margin="8">
+                        <TextBlock Text="Write asset tag back to MDM source after sync." TextWrapping="Wrap" Margin="0,0,0,12"/>
+                        <CheckBox Content="Enable write-back to Intune" IsChecked="{Binding WriteBackIntuneEnabled}" Margin="0,0,0,8"/>
+                        <CheckBox Content="Enable write-back to Iru" IsChecked="{Binding WriteBackIruEnabled}" Margin="0,0,0,8"/>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- Notifications Tab -->
+                <TabItem Header="Notifications">
+                    <StackPanel Margin="8">
+                        <TextBlock Text="Webhook URL" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding WebhookUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Webhook Type" Margin="0,0,0,4"/>
+                        <ComboBox ItemsSource="{Binding WebhookTypes}" SelectedItem="{Binding WebhookType}" Width="200" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Test Webhook" Command="{Binding TestWebhookCommand}" Margin="0,0,8,0"/>
+                            <TextBlock Text="{Binding WebhookTestStatus}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- Application Tab -->
+                <TabItem Header="Application">
+                    <StackPanel Margin="8">
+                        <TextBlock Text="Log Retention (days)" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding LogRetentionDays, UpdateSourceTrigger=PropertyChanged}" Width="100" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+                        <TextBlock Text="Asset Sync" FontWeight="Bold" Margin="0,12,0,4"/>
+                        <TextBlock Text=".NET 8 / WPF / SQLite" Foreground="Gray"/>
+                        <TextBlock Text="Credentials encrypted with Windows DPAPI." Foreground="Gray" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </TabItem>
             </TabControl>
+
+            <!-- Save -->
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button Content="Save All Settings" Command="{Binding SaveSettingsCommand}" Margin="0,0,8,0"/>
+                <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"/>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

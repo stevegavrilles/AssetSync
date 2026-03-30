@@ -2,6 +2,7 @@ using AssetSync.Core.Enums;
 using AssetSync.Core.Interfaces;
 using AssetSync.Core.Models;
 using Microsoft.Extensions.Logging;
+using LogLevel = AssetSync.Core.Enums.LogLevel;
 
 namespace AssetSync.Core.Services;
 

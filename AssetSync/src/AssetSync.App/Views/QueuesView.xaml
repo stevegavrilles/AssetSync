@@ -1,8 +1,79 @@
 <UserControl x:Class="AssetSync.App.Views.QueuesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel Margin="8">
-        <TextBlock Text="Queues" FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
-        <TextBlock Text="{Binding InfoText}" TextWrapping="Wrap"/>
-    </StackPanel>
+    <DockPanel Margin="8">
+        <TextBlock DockPanel.Dock="Top" Text="Queues" FontSize="20" FontWeight="Bold" Margin="0,0,0,8"/>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="Refresh" Command="{Binding LoadQueuesCommand}" Margin="0,0,8,0"/>
+            <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <TabControl>
+            <!-- Pending Models -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock>
+                        <Run Text="Pending Models ("/>
+                        <Run Text="{Binding PendingModelsCount, Mode=OneWay}"/>
+                        <Run Text=")"/>
+                    </TextBlock>
+                </TabItem.Header>
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" Text="Devices skipped because their MDM model string has no Snipe-IT model mapping." TextWrapping="Wrap" Margin="0,0,0,8" Foreground="Gray"/>
+                    <DataGrid ItemsSource="{Binding PendingModels}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Serial" Binding="{Binding SerialNumber}" Width="140"/>
+                            <DataGridTextColumn Header="Device Name" Binding="{Binding DeviceName}" Width="160"/>
+                            <DataGridTextColumn Header="Detail" Binding="{Binding ErrorDetail}" Width="*"/>
+                            <DataGridTextColumn Header="Timestamp" Binding="{Binding TimestampUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Width="130"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Unmatched Users -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock>
+                        <Run Text="Unmatched Users ("/>
+                        <Run Text="{Binding UnmatchedUsersCount, Mode=OneWay}"/>
+                        <Run Text=")"/>
+                    </TextBlock>
+                </TabItem.Header>
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" Text="Devices where the MDM user could not be matched to a Snipe-IT user." TextWrapping="Wrap" Margin="0,0,0,8" Foreground="Gray"/>
+                    <DataGrid ItemsSource="{Binding UnmatchedUsers}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Serial" Binding="{Binding SerialNumber}" Width="140"/>
+                            <DataGridTextColumn Header="Device Name" Binding="{Binding DeviceName}" Width="160"/>
+                            <DataGridTextColumn Header="Detail" Binding="{Binding ErrorDetail}" Width="*"/>
+                            <DataGridTextColumn Header="Timestamp" Binding="{Binding TimestampUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Width="130"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Duplicate Serials -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock>
+                        <Run Text="Duplicate Serials ("/>
+                        <Run Text="{Binding DuplicateSerialsCount, Mode=OneWay}"/>
+                        <Run Text=")"/>
+                    </TextBlock>
+                </TabItem.Header>
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" Text="Devices that matched multiple assets in Snipe-IT. Resolve duplicates manually." TextWrapping="Wrap" Margin="0,0,0,8" Foreground="Gray"/>
+                    <DataGrid ItemsSource="{Binding DuplicateSerials}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Serial" Binding="{Binding SerialNumber}" Width="140"/>
+                            <DataGridTextColumn Header="Device Name" Binding="{Binding DeviceName}" Width="160"/>
+                            <DataGridTextColumn Header="Detail" Binding="{Binding ErrorDetail}" Width="*"/>
+                            <DataGridTextColumn Header="Timestamp" Binding="{Binding TimestampUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Width="130"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
 </UserControl>

@@ -1,8 +1,146 @@
 <UserControl x:Class="AssetSync.App.Views.MappingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel Margin="8">
-        <TextBlock Text="Mappings" FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
-        <TextBlock Text="{Binding InfoText}" TextWrapping="Wrap"/>
-    </StackPanel>
+    <DockPanel Margin="8">
+        <TextBlock DockPanel.Dock="Top" Text="Mappings" FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusMessage}" Margin="0,8,0,0"/>
+
+        <TabControl>
+            <!-- Model Mappings -->
+            <TabItem Header="Model">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                <TextBlock Text="MDM Model String" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditMdmModelString, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                <TextBlock Text="Snipe-IT Model ID" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditSnipeItModelId, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Save" Command="{Binding SaveModelMappingCommand}" Margin="0,0,4,0"/>
+                            <Button Content="Delete" Command="{Binding DeleteModelMappingCommand}" Margin="0,0,4,0"/>
+                            <Button Content="New" Command="{Binding NewModelMappingCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding ModelMappings}" SelectedItem="{Binding SelectedModelMapping}"
+                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="MDM Model" Binding="{Binding MdmModelString}" Width="*"/>
+                            <DataGridTextColumn Header="Snipe-IT Model ID" Binding="{Binding SnipeItModelId}" Width="120"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- User Mappings -->
+            <TabItem Header="User">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                <TextBlock Text="MDM User Identifier" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditMdmUserIdentifier, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                <TextBlock Text="Snipe-IT User ID" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditSnipeItUserId, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Save" Command="{Binding SaveUserMappingCommand}" Margin="0,0,4,0"/>
+                            <Button Content="Delete" Command="{Binding DeleteUserMappingCommand}" Margin="0,0,4,0"/>
+                            <Button Content="New" Command="{Binding NewUserMappingCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding UserMappings}" SelectedItem="{Binding SelectedUserMapping}"
+                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="MDM User" Binding="{Binding MdmUserIdentifier}" Width="*"/>
+                            <DataGridTextColumn Header="Snipe-IT User ID" Binding="{Binding SnipeItUserId}" Width="120"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Build Mappings -->
+            <TabItem Header="Build">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                <TextBlock Text="Build Number" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditBuildNumber, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                <TextBlock Text="Friendly Name" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditFriendlyName, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Save" Command="{Binding SaveBuildMappingCommand}" Margin="0,0,4,0"/>
+                            <Button Content="Delete" Command="{Binding DeleteBuildMappingCommand}" Margin="0,0,4,0"/>
+                            <Button Content="New" Command="{Binding NewBuildMappingCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding BuildMappings}" SelectedItem="{Binding SelectedBuildMapping}"
+                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Build Number" Binding="{Binding BuildNumber}" Width="120"/>
+                            <DataGridTextColumn Header="Friendly Name" Binding="{Binding FriendlyName}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Category Mappings -->
+            <TabItem Header="Category">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                <TextBlock Text="MDM Device Type" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditMdmDeviceType, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                <TextBlock Text="Snipe-IT Category ID" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditSnipeItCategoryId, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Save" Command="{Binding SaveCategoryMappingCommand}" Margin="0,0,4,0"/>
+                            <Button Content="Delete" Command="{Binding DeleteCategoryMappingCommand}" Margin="0,0,4,0"/>
+                            <Button Content="New" Command="{Binding NewCategoryMappingCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding CategoryMappings}" SelectedItem="{Binding SelectedCategoryMapping}"
+                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="MDM Device Type" Binding="{Binding MdmDeviceType}" Width="*"/>
+                            <DataGridTextColumn Header="Snipe-IT Category ID" Binding="{Binding SnipeItCategoryId}" Width="140"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
 </UserControl>

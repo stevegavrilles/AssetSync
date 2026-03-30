@@ -1,14 +1,87 @@
 <UserControl x:Class="AssetSync.App.Views.DashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel Margin="8">
-        <TextBlock Text="Dashboard" FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+    <DockPanel Margin="8">
+        <TextBlock DockPanel.Dock="Top" Text="Dashboard" FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
+
+        <!-- Connection Status Cards -->
+        <UniformGrid DockPanel.Dock="Top" Rows="1" Columns="3" Margin="0,0,0,12">
+            <Border BorderBrush="{Binding SnipeItStatusColor}" BorderThickness="2" CornerRadius="4" Padding="8" Margin="0,0,4,0">
+                <StackPanel>
+                    <TextBlock Text="Snipe-IT" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding SnipeItStatus}" Foreground="{Binding SnipeItStatusColor}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+            <Border BorderBrush="{Binding IntuneStatusColor}" BorderThickness="2" CornerRadius="4" Padding="8" Margin="2,0">
+                <StackPanel>
+                    <TextBlock Text="Intune" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding IntuneStatus}" Foreground="{Binding IntuneStatusColor}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+            <Border BorderBrush="{Binding IruStatusColor}" BorderThickness="2" CornerRadius="4" Padding="8" Margin="4,0,0,0">
+                <StackPanel>
+                    <TextBlock Text="Iru" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding IruStatus}" Foreground="{Binding IruStatusColor}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <!-- Action Buttons -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
             <Button Content="Sync Now" Command="{Binding SyncNowCommand}" Margin="0,0,8,0"/>
             <Button Content="Dry Run" Command="{Binding DryRunCommand}" Margin="0,0,8,0"/>
+            <Button Content="Refresh Status" Command="{Binding RefreshConnectionStatusCommand}" Margin="0,0,8,0"/>
         </StackPanel>
-        <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
-        <TextBlock Text="{Binding LastSyncText}" Margin="0,0,0,4"/>
-        <TextBlock Text="{Binding NextSyncText}" Margin="0,0,0,4"/>
-    </StackPanel>
+
+        <!-- Progress Indicator -->
+        <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="{Binding IsSyncing}"
+                     Visibility="{Binding IsSyncing, Converter={StaticResource BoolToVis}}"
+                     Height="4" Margin="0,0,0,12"/>
+
+        <!-- Last Sync Summary -->
+        <GroupBox DockPanel.Dock="Top" Header="Last Sync Summary"
+                  Visibility="{Binding HasSyncResult, Converter={StaticResource BoolToVis}}" Margin="0,0,0,12">
+            <Grid Margin="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="60"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition/>
+                    <RowDefinition/>
+                    <RowDefinition/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Created:" FontWeight="Bold" Margin="0,0,8,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding LastCreated}" Margin="0,0,16,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Updated:" FontWeight="Bold" Margin="0,0,8,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding LastUpdated}" Margin="0,0,0,4"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Skipped:" FontWeight="Bold" Margin="0,0,8,4"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LastSkipped}" Margin="0,0,16,4"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Errors:" FontWeight="Bold" Margin="0,0,8,4" Foreground="Red"/>
+                <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding LastErrors}" Margin="0,0,0,4"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" Margin="0,4,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value=""/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding LastDryRun}" Value="True">
+                                    <Setter Property="Text" Value="(Dry run -- no changes written)"/>
+                                    <Setter Property="Foreground" Value="Orange"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </GroupBox>
+
+        <!-- Timing -->
+        <StackPanel DockPanel.Dock="Top">
+            <TextBlock Text="{Binding LastSyncText}" Margin="0,0,0,4"/>
+            <TextBlock Text="{Binding NextSyncText}" Margin="0,0,0,4"/>
+        </StackPanel>
+    </DockPanel>
 </UserControl>

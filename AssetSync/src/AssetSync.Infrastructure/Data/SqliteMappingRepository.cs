@@ -113,6 +113,21 @@ public class SqliteMappingRepository : IMappingRepository
         return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? map(reader) : null;
     }
 
+    public Task DeleteModelMappingAsync(int id, CancellationToken cancellationToken = default) => DeleteMappingAsync("model_mappings", id, cancellationToken);
+    public Task DeleteUserMappingAsync(int id, CancellationToken cancellationToken = default) => DeleteMappingAsync("user_mappings", id, cancellationToken);
+    public Task DeleteBuildMappingAsync(int id, CancellationToken cancellationToken = default) => DeleteMappingAsync("build_mappings", id, cancellationToken);
+    public Task DeleteCategoryMappingAsync(int id, CancellationToken cancellationToken = default) => DeleteMappingAsync("category_mappings", id, cancellationToken);
+
+    private async Task DeleteMappingAsync(string table, int id, CancellationToken cancellationToken)
+    {
+        await using var conn = new SqliteConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"DELETE FROM {table} WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task SaveMappingAsync(string table, string keyCol, string valueCol, int id, string keyValue, object value, CancellationToken cancellationToken)
     {
         await using var conn = new SqliteConnection(_connectionString);

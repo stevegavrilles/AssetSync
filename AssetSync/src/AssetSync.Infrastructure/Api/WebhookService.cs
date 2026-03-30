@@ -93,7 +93,7 @@ public class WebhookService : IWebhookService
     {
         if (_webhookType == "Teams")
         {
-            var card = new { type = "message", attachments = new[] { new { contentType = "application/vnd.microsoft.card.adaptive", content = new { type = "AdaptiveCard", version = "1.0", body = new object[] { new { type = "TextBlock", text = title, weight = "bolder" }, new { type = "TextBlock", text = message } } } } };
+            var card = new { type = "message", attachments = new[] { new { contentType = "application/vnd.microsoft.card.adaptive", content = new { type = "AdaptiveCard", version = "1.0", body = new object[] { new { type = "TextBlock", text = title, weight = "bolder" }, new { type = "TextBlock", text = message } } } } } };
             return (JsonSerializer.Serialize(card), "application/json");
         }
         if (_webhookType == "Slack")

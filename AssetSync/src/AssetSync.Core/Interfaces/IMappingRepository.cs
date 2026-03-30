@@ -16,4 +16,8 @@ public interface IMappingRepository
     Task<IReadOnlyList<CategoryMapping>> GetCategoryMappingsAsync(CancellationToken cancellationToken = default);
     Task<CategoryMapping?> GetCategoryMappingAsync(string mdmDeviceType, CancellationToken cancellationToken = default);
     Task SaveCategoryMappingAsync(CategoryMapping mapping, CancellationToken cancellationToken = default);
+    Task DeleteModelMappingAsync(int id, CancellationToken cancellationToken = default);
+    Task DeleteUserMappingAsync(int id, CancellationToken cancellationToken = default);
+    Task DeleteBuildMappingAsync(int id, CancellationToken cancellationToken = default);
+    Task DeleteCategoryMappingAsync(int id, CancellationToken cancellationToken = default);
 }

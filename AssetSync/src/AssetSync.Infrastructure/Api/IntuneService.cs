@@ -1,6 +1,6 @@
 using AssetSync.Core.Interfaces;
-using AssetSync.Core.Models;
 using AssetSync.Core.Services;
+using Device = AssetSync.Core.Models.Device;
 using Azure.Identity;
 using Microsoft.Graph.Models;
 using Microsoft.Kiota.Authentication.Azure;
@@ -65,8 +65,8 @@ public class IntuneService : IIntuneService
                 DeviceName = m.DeviceName,
                 Model = m.Model,
                 AssignedUserUpn = m.UserPrincipalName,
-                OsVersion = m.OSVersion,
-                DeviceType = m.DeviceType?.ToString(),
+                OsVersion = m.OsVersion,
+                DeviceType = m.DeviceCategoryDisplayName ?? m.ManagementAgent?.ToString(),
                 PlatformSource = "Intune",
                 AzureAdDeviceId = m.AzureADDeviceId,
                 OperatingSystem = m.OperatingSystem
