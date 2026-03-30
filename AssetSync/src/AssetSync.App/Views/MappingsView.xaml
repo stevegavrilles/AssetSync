@@ -2,12 +2,146 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <DockPanel Margin="8">
-        <TextBlock DockPanel.Dock="Top" Text="Mappings" FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
-        <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusMessage}" Margin="0,8,0,0"/>
+        <TextBlock DockPanel.Dock="Top" Text="Mappings" FontSize="20" FontWeight="Bold" Margin="0,0,0,8"/>
+
+        <!-- Action bar -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="Fetch from Snipe-IT" Command="{Binding FetchSnipeItLookupsCommand}"
+                    Padding="8,4" Margin="0,0,6,0"/>
+            <Button Content="Discover Unmapped" Command="{Binding LoadPendingMappingsCommand}"
+                    Padding="8,4" Margin="0,0,8,0"/>
+            <ProgressBar IsIndeterminate="{Binding IsLoading}"
+                         Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"
+                         Width="100" Height="4" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" MaxWidth="600"
+                       Foreground="#555"/>
+        </StackPanel>
 
         <TabControl>
-            <!-- Model Mappings -->
-            <TabItem Header="Model">
+
+            <!-- ================================================================ -->
+            <!-- PENDING TAB — grid of unmapped models with inline Snipe-IT picker -->
+            <!-- ================================================================ -->
+            <TabItem Header="⚠ Pending">
+                <DockPanel Margin="8">
+
+                    <!-- Save All button -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Save All Mappings" Command="{Binding SaveAllPendingCommand}"
+                                Padding="10,4" FontWeight="SemiBold"
+                                Background="#0078D4" Foreground="White"/>
+                        <TextBlock VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#555" FontStyle="Italic">
+                            <Run Text="Select a Snipe-IT model for each row, then click Save All Mappings."/>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <DataGrid x:Name="PendingGrid"
+                              ItemsSource="{Binding PendingMappings}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              SelectionMode="Single"
+                              RowHeaderWidth="0"
+                              GridLinesVisibility="Horizontal"
+                              AlternatingRowBackground="#FAFAFA">
+
+                        <DataGrid.Columns>
+
+                            <!-- MDM Model String -->
+                            <DataGridTextColumn Header="MDM Model String"
+                                               Binding="{Binding MdmModel}"
+                                               Width="*" IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Setter Property="Padding" Value="4,0"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Device Count -->
+                            <DataGridTextColumn Header="Devices"
+                                               Binding="{Binding DeviceCount}"
+                                               Width="70" IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Snipe-IT Model Picker (ComboBox — always visible) -->
+                            <DataGridTemplateColumn Header="Map to Snipe-IT Model" Width="300">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox ItemsSource="{Binding DataContext.SnipeItModels,
+                                                      RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  SelectedItem="{Binding SelectedSnipeItModel, UpdateSourceTrigger=PropertyChanged}"
+                                                  DisplayMemberPath="Name"
+                                                  Margin="2,2"
+                                                  IsEditable="True"
+                                                  StaysOpenOnEdit="True"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Status -->
+                            <DataGridTextColumn Header="Status"
+                                               Binding="{Binding StatusText}"
+                                               Width="180" IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Setter Property="Padding" Value="4,0"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSaved}" Value="True">
+                                                <Setter Property="Foreground" Value="#107C10"/>
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                        </DataGrid.Columns>
+
+                        <!-- Empty state message -->
+                        <DataGrid.Style>
+                            <Style TargetType="DataGrid">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding PendingMappings.Count}" Value="0">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="DataGrid">
+                                                    <Border BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+                                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
+                                                            <TextBlock Text="No unmapped models found" FontSize="16" Foreground="#888"
+                                                                       HorizontalAlignment="Center" FontWeight="SemiBold"/>
+                                                            <TextBlock TextAlignment="Center" Foreground="#999" Margin="0,8,0,0" FontSize="13">
+                                                                <Run Text="Click 'Fetch from Snipe-IT' to load available models,"/>
+                                                                <LineBreak/>
+                                                                <Run Text="then 'Discover Unmapped' to find devices awaiting mapping."/>
+                                                                <LineBreak/>
+                                                                <Run Text="(You must run at least one sync first.)"/>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.Style>
+
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Model Mappings (existing CRUD) -->
+            <TabItem Header="Model Mappings">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                         <Grid>
@@ -20,8 +154,11 @@
                                 <TextBox Text="{Binding EditMdmModelString, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Margin="4,0,0,0">
-                                <TextBlock Text="Snipe-IT Model ID" Margin="0,0,0,4"/>
-                                <TextBox Text="{Binding EditSnipeItModelId, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="Snipe-IT Model" Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding SnipeItModels}" SelectedItem="{Binding SelectedSnipeItModel}"
+                                          DisplayMemberPath="Name" IsEditable="True" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditSnipeItModelId, UpdateSourceTrigger=PropertyChanged}"
+                                         IsReadOnly="True" Background="#f5f5f5"/>
                             </StackPanel>
                         </Grid>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
@@ -41,7 +178,7 @@
             </TabItem>
 
             <!-- User Mappings -->
-            <TabItem Header="User">
+            <TabItem Header="User Mappings">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                         <Grid>
@@ -50,12 +187,15 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,4,0">
-                                <TextBlock Text="MDM User Identifier" Margin="0,0,0,4"/>
+                                <TextBlock Text="MDM User Identifier (UPN)" Margin="0,0,0,4"/>
                                 <TextBox Text="{Binding EditMdmUserIdentifier, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Margin="4,0,0,0">
-                                <TextBlock Text="Snipe-IT User ID" Margin="0,0,0,4"/>
-                                <TextBox Text="{Binding EditSnipeItUserId, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="Snipe-IT User" Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding SnipeItUsers}" SelectedItem="{Binding SelectedSnipeItUser}"
+                                          DisplayMemberPath="Name" IsEditable="True" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditSnipeItUserId, UpdateSourceTrigger=PropertyChanged}"
+                                         IsReadOnly="True" Background="#f5f5f5"/>
                             </StackPanel>
                         </Grid>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
@@ -75,7 +215,7 @@
             </TabItem>
 
             <!-- Build Mappings -->
-            <TabItem Header="Build">
+            <TabItem Header="Build Mappings">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                         <Grid>
@@ -109,7 +249,7 @@
             </TabItem>
 
             <!-- Category Mappings -->
-            <TabItem Header="Category">
+            <TabItem Header="Category Mappings">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                         <Grid>
@@ -122,8 +262,11 @@
                                 <TextBox Text="{Binding EditMdmDeviceType, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Margin="4,0,0,0">
-                                <TextBlock Text="Snipe-IT Category ID" Margin="0,0,0,4"/>
-                                <TextBox Text="{Binding EditSnipeItCategoryId, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="Snipe-IT Category" Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding SnipeItCategories}" SelectedItem="{Binding SelectedSnipeItCategory}"
+                                          DisplayMemberPath="Name" IsEditable="True" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding EditSnipeItCategoryId, UpdateSourceTrigger=PropertyChanged}"
+                                         IsReadOnly="True" Background="#f5f5f5"/>
                             </StackPanel>
                         </Grid>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
@@ -141,6 +284,7 @@
                     </DataGrid>
                 </DockPanel>
             </TabItem>
+
         </TabControl>
     </DockPanel>
 </UserControl>

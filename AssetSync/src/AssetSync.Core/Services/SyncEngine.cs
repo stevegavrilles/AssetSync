@@ -119,7 +119,7 @@ public class SyncEngine : ISyncEngine
                     if (modelMapping == null)
                     {
                         summary.Skipped++;
-                        await LogAsync(runId, LogLevel.Warning, SourceSystem.Application, "skip", device.SerialNumber, device.DeviceName, true, "Pending model mapping", cancellationToken).ConfigureAwait(false);
+                        await LogAsync(runId, LogLevel.Warning, SourceSystem.Application, "skip", device.SerialNumber, device.DeviceName, true, $"Pending model mapping: {device.Model}", cancellationToken).ConfigureAwait(false);
                         continue;
                     }
                     device.SnipeItModelId = modelMapping.SnipeItModelId;
@@ -195,7 +195,7 @@ public class SyncEngine : ISyncEngine
             _logger.LogError(ex, "Sync failed");
             summary.CompletedAtUtc = DateTimeOffset.UtcNow;
             summary.Errors++;
-            await LogAsync(runId, LogLevel.Error, SourceSystem.Application, "sync_complete", null, null, false, ex.Message, cancellationToken).ConfigureAwait(false);
+            await LogAsync(runId, LogLevel.Error, SourceSystem.Application, "sync_complete", null, null, false, $"{ex.Message}\n{ex.StackTrace}", cancellationToken).ConfigureAwait(false);
             await _webhookService.SendSyncNotificationAsync(summary, cancellationToken).ConfigureAwait(false);
         }
 

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -8,6 +9,7 @@ namespace AssetSync.Infrastructure.Api;
 
 public class SnipeItService : ISnipeItService
 {
+    private const int MaxRetries = 3;
     private readonly string _baseUrl;
     private readonly Func<string> _getApiKey;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -27,21 +29,29 @@ public class SnipeItService : ISnipeItService
 
     public async Task<IReadOnlyList<Device>> SearchAssetsBySerialAsync(string searchTerm, CancellationToken cancellationToken = default)
     {
-        var client = CreateClient();
         var url = $"{_baseUrl}/api/v1/hardware?search={Uri.EscapeDataString(searchTerm)}";
-        var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        var response = await SendWithRetryAsync(HttpMethod.Get, url, null, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var doc = JsonDocument.Parse(json);
-        var rows = doc.RootElement.TryGetProperty("rows", out var rowsEl) ? rowsEl : doc.RootElement;
+        var root = doc.RootElement;
+        JsonElement rows;
+        if (root.ValueKind == JsonValueKind.Array)
+            rows = root;
+        else if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("rows", out var rowsEl))
+            rows = rowsEl;
+        else
+            return new List<Device>();
         var list = new List<Device>();
+        if (rows.ValueKind != JsonValueKind.Array) return list;
         foreach (var r in rows.EnumerateArray())
         {
+            if (r.ValueKind != JsonValueKind.Object) continue;
             var id = r.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
             var serial = r.TryGetProperty("serial", out var s) ? s.GetString() : null;
             var name = r.TryGetProperty("name", out var n) ? n.GetString() : null;
-            var modelId = r.TryGetProperty("model", out var mo) && mo.TryGetProperty("id", out var mid) ? mid.GetInt32() : (int?)null;
-            var assignedTo = r.TryGetProperty("assigned_to", out var at) && at.ValueKind != JsonValueKind.Null && at.TryGetProperty("id", out var aid) ? aid.GetInt32() : (int?)null;
+            var modelId = r.TryGetProperty("model", out var mo) && mo.ValueKind == JsonValueKind.Object && mo.TryGetProperty("id", out var mid) ? mid.GetInt32() : (int?)null;
+            var assignedTo = r.TryGetProperty("assigned_to", out var at) && at.ValueKind == JsonValueKind.Object && at.TryGetProperty("id", out var aid) ? aid.GetInt32() : (int?)null;
             var assetTag = r.TryGetProperty("asset_tag", out var tag) ? tag.GetString() : null;
             list.Add(new Device
             {
@@ -59,7 +69,6 @@ public class SnipeItService : ISnipeItService
 
     public async Task<Device?> CreateAssetAsync(Device device, CancellationToken cancellationToken = default)
     {
-        var client = CreateClient();
         var payload = new Dictionary<string, object?>
         {
             ["name"] = device.DeviceName ?? device.SerialNumber,
@@ -68,14 +77,14 @@ public class SnipeItService : ISnipeItService
             ["assigned_to"] = device.SnipeItAssignedUserId,
             ["category_id"] = device.SnipeItCategoryId
         };
-        var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var response = await client.PostAsync($"{_baseUrl}/api/v1/hardware", content, cancellationToken).ConfigureAwait(false);
+        var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var response = await SendWithRetryAsync(HttpMethod.Post, $"{_baseUrl}/api/v1/hardware", body, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) return null;
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var doc = JsonDocument.Parse(responseJson);
-        var created = doc.RootElement.TryGetProperty("payload", out var p) ? p : doc.RootElement;
-        var id = created.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
+        var root = doc.RootElement;
+        var created = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("payload", out var p) ? p : root;
+        var id = created.ValueKind == JsonValueKind.Object && created.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
         device.SnipeItAssetId = id;
         return device;
     }
@@ -83,7 +92,6 @@ public class SnipeItService : ISnipeItService
     public async Task<bool> UpdateAssetAsync(int assetId, IReadOnlyDictionary<string, object?> updates, CancellationToken cancellationToken = default)
     {
         if (updates.Count == 0) return true;
-        var client = CreateClient();
         var payload = new Dictionary<string, object?>();
         var customFields = new Dictionary<string, object?>();
         foreach (var kv in updates)
@@ -95,10 +103,95 @@ public class SnipeItService : ISnipeItService
         }
         if (customFields.Count > 0)
             payload["custom_fields"] = customFields;
-        var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var response = await client.PatchAsync($"{_baseUrl}/api/v1/hardware/{assetId}", content, cancellationToken).ConfigureAwait(false);
+        var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var response = await SendWithRetryAsync(HttpMethod.Patch, $"{_baseUrl}/api/v1/hardware/{assetId}", body, cancellationToken).ConfigureAwait(false);
         return response.IsSuccessStatusCode;
+    }
+
+    public async Task<IReadOnlyList<SnipeItLookup>> GetModelsAsync(CancellationToken cancellationToken = default)
+        => await FetchLookupsAsync("/api/v1/models", cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<SnipeItLookup>> GetCategoriesAsync(CancellationToken cancellationToken = default)
+        => await FetchLookupsAsync("/api/v1/categories", cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<SnipeItLookup>> GetUsersAsync(CancellationToken cancellationToken = default)
+    {
+        var list = new List<SnipeItLookup>();
+        var offset = 0;
+        const int limit = 500;
+        while (true)
+        {
+            var response = await SendWithRetryAsync(HttpMethod.Get, $"{_baseUrl}/api/v1/users?limit={limit}&offset={offset}", null, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) break;
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var rows = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("rows", out var r) ? r : root;
+            if (rows.ValueKind != JsonValueKind.Array) break;
+            int count = 0;
+            foreach (var u in rows.EnumerateArray())
+            {
+                if (u.ValueKind != JsonValueKind.Object) continue;
+                count++;
+                var id = u.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
+                var first = u.TryGetProperty("first_name", out var fn) ? fn.GetString() ?? "" : "";
+                var last = u.TryGetProperty("last_name", out var ln) ? ln.GetString() ?? "" : "";
+                var uname = u.TryGetProperty("username", out var un) ? un.GetString() ?? "" : "";
+                var name = !string.IsNullOrEmpty(first) || !string.IsNullOrEmpty(last) ? $"{first} {last}".Trim() : uname;
+                list.Add(new SnipeItLookup { Id = id, Name = name });
+            }
+            if (count < limit) break;
+            offset += count;
+        }
+        return list;
+    }
+
+    private async Task<IReadOnlyList<SnipeItLookup>> FetchLookupsAsync(string endpoint, CancellationToken cancellationToken)
+    {
+        var list = new List<SnipeItLookup>();
+        var offset = 0;
+        const int limit = 500;
+        while (true)
+        {
+            var response = await SendWithRetryAsync(HttpMethod.Get, $"{_baseUrl}{endpoint}?limit={limit}&offset={offset}", null, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) break;
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var rows = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("rows", out var r) ? r : root;
+            if (rows.ValueKind != JsonValueKind.Array) break;
+            int count = 0;
+            foreach (var item in rows.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                count++;
+                var id = item.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
+                var name = item.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                list.Add(new SnipeItLookup { Id = id, Name = name });
+            }
+            if (count < limit) break;
+            offset += count;
+        }
+        return list;
+    }
+
+    private async Task<HttpResponseMessage> SendWithRetryAsync(HttpMethod method, string url, HttpContent? body, CancellationToken cancellationToken)
+    {
+        for (int attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            var client = CreateClient();
+            var request = new HttpRequestMessage(method, url) { Content = body };
+            var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+            if (response.StatusCode != HttpStatusCode.TooManyRequests || attempt == MaxRetries)
+                return response;
+
+            // Honor Retry-After header if present, otherwise exponential backoff
+            var delay = response.Headers.RetryAfter?.Delta
+                        ?? TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+        throw new InvalidOperationException("Unreachable");
     }
 
     private HttpClient CreateClient()

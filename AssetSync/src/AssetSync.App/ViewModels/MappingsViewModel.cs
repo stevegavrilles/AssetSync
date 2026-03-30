@@ -9,17 +9,29 @@ namespace AssetSync.App.ViewModels;
 public partial class MappingsViewModel : ObservableObject
 {
     private readonly IMappingRepository _repo;
+    private readonly ISnipeItService _snipeIt;
+    private readonly ILogRepository _logRepository;
+
+    // Snipe-IT lookup lists for dropdowns
+    public ObservableCollection<SnipeItLookup> SnipeItModels { get; } = new();
+    public ObservableCollection<SnipeItLookup> SnipeItCategories { get; } = new();
+    public ObservableCollection<SnipeItLookup> SnipeItUsers { get; } = new();
+
+    // --- Pending Mappings Grid ---
+    public ObservableCollection<PendingMappingRow> PendingMappings { get; } = new();
 
     // Model Mappings
     public ObservableCollection<ModelMapping> ModelMappings { get; } = new();
     [ObservableProperty] private ModelMapping? _selectedModelMapping;
     [ObservableProperty] private string _editMdmModelString = "";
+    [ObservableProperty] private SnipeItLookup? _selectedSnipeItModel;
     [ObservableProperty] private int _editSnipeItModelId;
 
     // User Mappings
     public ObservableCollection<UserMapping> UserMappings { get; } = new();
     [ObservableProperty] private UserMapping? _selectedUserMapping;
     [ObservableProperty] private string _editMdmUserIdentifier = "";
+    [ObservableProperty] private SnipeItLookup? _selectedSnipeItUser;
     [ObservableProperty] private int _editSnipeItUserId;
 
     // Build Mappings
@@ -32,14 +44,34 @@ public partial class MappingsViewModel : ObservableObject
     public ObservableCollection<CategoryMapping> CategoryMappings { get; } = new();
     [ObservableProperty] private CategoryMapping? _selectedCategoryMapping;
     [ObservableProperty] private string _editMdmDeviceType = "";
+    [ObservableProperty] private SnipeItLookup? _selectedSnipeItCategory;
     [ObservableProperty] private int _editSnipeItCategoryId;
 
-    [ObservableProperty] private string _statusMessage = "";
+    [ObservableProperty] private string _statusMessage = "Click 'Fetch from Snipe-IT' to load models, then 'Discover Unmapped' to find devices needing mapping.";
+    [ObservableProperty] private bool _isLoading;
 
-    public MappingsViewModel(IMappingRepository repo)
+    public MappingsViewModel(IMappingRepository repo, ISnipeItService snipeIt, ILogRepository logRepository)
     {
         _repo = repo;
+        _snipeIt = snipeIt;
+        _logRepository = logRepository;
         _ = LoadAllAsync();
+    }
+
+    // When a Snipe-IT dropdown selection changes, update the ID field
+    partial void OnSelectedSnipeItModelChanged(SnipeItLookup? value)
+    {
+        if (value != null) EditSnipeItModelId = value.Id;
+    }
+
+    partial void OnSelectedSnipeItUserChanged(SnipeItLookup? value)
+    {
+        if (value != null) EditSnipeItUserId = value.Id;
+    }
+
+    partial void OnSelectedSnipeItCategoryChanged(SnipeItLookup? value)
+    {
+        if (value != null) EditSnipeItCategoryId = value.Id;
     }
 
     [RelayCommand]
@@ -51,13 +83,159 @@ public partial class MappingsViewModel : ObservableObject
         await LoadCategoryMappingsAsync();
     }
 
-    // --- Model Mappings ---
+    [RelayCommand]
+    private async Task FetchSnipeItLookupsAsync()
+    {
+        IsLoading = true;
+        StatusMessage = "Fetching from Snipe-IT...";
+        try
+        {
+            var models = await _snipeIt.GetModelsAsync();
+            SnipeItModels.Clear();
+            foreach (var m in models) SnipeItModels.Add(m);
+
+            var categories = await _snipeIt.GetCategoriesAsync();
+            SnipeItCategories.Clear();
+            foreach (var c in categories) SnipeItCategories.Add(c);
+
+            var users = await _snipeIt.GetUsersAsync();
+            SnipeItUsers.Clear();
+            foreach (var u in users) SnipeItUsers.Add(u);
+
+            StatusMessage = $"Loaded {models.Count} models, {categories.Count} categories, {users.Count} users from Snipe-IT.";
+
+            // Auto-load pending mappings grid now that we have Snipe-IT data
+            await LoadPendingMappingsAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Fetch failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // --- Pending Mappings Grid ---
+
+    [RelayCommand]
+    private async Task LoadPendingMappingsAsync()
+    {
+        IsLoading = true;
+        StatusMessage = "Discovering devices needing model mappings...";
+        try
+        {
+            var pending = await _logRepository.GetEntriesAsync(new LogFilter
+            {
+                FreeText = "Pending model mapping",
+                Limit = 2000
+            });
+
+            var existingMappings = await _repo.GetModelMappingsAsync();
+            var mappedModels = new HashSet<string>(
+                existingMappings.Select(m => m.MdmModelString),
+                StringComparer.OrdinalIgnoreCase);
+
+            // Group by model string, counting affected devices
+            var grouped = new Dictionary<string, (int Count, List<string> Devices)>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in pending)
+            {
+                var model = entry.ErrorDetail;
+                if (model != null && model.StartsWith("Pending model mapping:"))
+                    model = model["Pending model mapping:".Length..].Trim();
+                else
+                    model = null;
+
+                if (string.IsNullOrEmpty(model))
+                    model = entry.DeviceName ?? entry.SerialNumber;
+
+                if (string.IsNullOrEmpty(model) || mappedModels.Contains(model)) continue;
+
+                if (!grouped.TryGetValue(model, out var entry2))
+                    grouped[model] = (1, new List<string> { entry.DeviceName ?? entry.SerialNumber ?? "" });
+                else
+                    grouped[model] = (entry2.Count + 1, entry2.Devices);
+            }
+
+            PendingMappings.Clear();
+            foreach (var (model, (count, _)) in grouped.OrderBy(kvp => kvp.Key))
+            {
+                PendingMappings.Add(new PendingMappingRow
+                {
+                    MdmModel = model,
+                    DeviceCount = count,
+                    StatusText = "Pending"
+                });
+            }
+
+            if (PendingMappings.Count == 0)
+                StatusMessage = "No unmapped models found. Run a sync first to discover devices, or all models are already mapped.";
+            else
+                StatusMessage = $"Found {PendingMappings.Count} model(s) needing mapping. Select a Snipe-IT model for each row, then click 'Save All Mappings'.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Discovery failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveAllPendingAsync()
+    {
+        var toSave = PendingMappings.Where(r => r.SelectedSnipeItModel != null && !r.IsSaved).ToList();
+        if (toSave.Count == 0)
+        {
+            StatusMessage = "No rows have a Snipe-IT model selected. Select a model in the dropdown for each row first.";
+            return;
+        }
+
+        IsLoading = true;
+        StatusMessage = $"Saving {toSave.Count} mapping(s)...";
+        try
+        {
+            foreach (var row in toSave)
+            {
+                var mapping = new ModelMapping
+                {
+                    MdmModelString = row.MdmModel,
+                    SnipeItModelId = row.SelectedSnipeItModel!.Id
+                };
+                await _repo.SaveModelMappingAsync(mapping);
+                row.IsSaved = true;
+                row.StatusText = $"✓ {row.SelectedSnipeItModel!.Name}";
+            }
+
+            await LoadModelMappingsAsync();
+
+            // Remove saved rows from pending list
+            var saved = PendingMappings.Where(r => r.IsSaved).ToList();
+            foreach (var r in saved) PendingMappings.Remove(r);
+
+            StatusMessage = $"Saved {toSave.Count} model mapping(s). {PendingMappings.Count} remaining.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Save failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // --- Model Mappings (CRUD) ---
 
     partial void OnSelectedModelMappingChanged(ModelMapping? value)
     {
         if (value == null) return;
         EditMdmModelString = value.MdmModelString;
         EditSnipeItModelId = value.SnipeItModelId;
+        SelectedSnipeItModel = SnipeItModels.FirstOrDefault(m => m.Id == value.SnipeItModelId);
     }
 
     private async Task LoadModelMappingsAsync()
@@ -95,6 +273,7 @@ public partial class MappingsViewModel : ObservableObject
         SelectedModelMapping = null;
         EditMdmModelString = "";
         EditSnipeItModelId = 0;
+        SelectedSnipeItModel = null;
     }
 
     // --- User Mappings ---
@@ -104,6 +283,7 @@ public partial class MappingsViewModel : ObservableObject
         if (value == null) return;
         EditMdmUserIdentifier = value.MdmUserIdentifier;
         EditSnipeItUserId = value.SnipeItUserId;
+        SelectedSnipeItUser = SnipeItUsers.FirstOrDefault(u => u.Id == value.SnipeItUserId);
     }
 
     private async Task LoadUserMappingsAsync()
@@ -141,6 +321,7 @@ public partial class MappingsViewModel : ObservableObject
         SelectedUserMapping = null;
         EditMdmUserIdentifier = "";
         EditSnipeItUserId = 0;
+        SelectedSnipeItUser = null;
     }
 
     // --- Build Mappings ---
@@ -196,6 +377,7 @@ public partial class MappingsViewModel : ObservableObject
         if (value == null) return;
         EditMdmDeviceType = value.MdmDeviceType;
         EditSnipeItCategoryId = value.SnipeItCategoryId;
+        SelectedSnipeItCategory = SnipeItCategories.FirstOrDefault(c => c.Id == value.SnipeItCategoryId);
     }
 
     private async Task LoadCategoryMappingsAsync()
@@ -233,5 +415,6 @@ public partial class MappingsViewModel : ObservableObject
         SelectedCategoryMapping = null;
         EditMdmDeviceType = "";
         EditSnipeItCategoryId = 0;
+        SelectedSnipeItCategory = null;
     }
 }
