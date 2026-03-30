@@ -95,6 +95,9 @@ public class SyncEngine : ISyncEngine
                 ? await _iruService.GetDevicesAsync(cancellationToken).ConfigureAwait(false)
                 : Array.Empty<Device>();
 
+            var writeBackIntune = await _configRepository.GetWriteBackIntuneEnabledAsync(cancellationToken).ConfigureAwait(false);
+            var writeBackIru = await _configRepository.GetWriteBackIruEnabledAsync(cancellationToken).ConfigureAwait(false);
+
             var merged = _merger.Merge(intuneList, iruList);
 
             foreach (var device in merged)
@@ -130,6 +133,7 @@ public class SyncEngine : ISyncEngine
                         {
                             summary.Created++;
                             await LogAsync(runId, LogLevel.Info, SourceSystem.SnipeIt, "create", device.SerialNumber, device.DeviceName, true, null, cancellationToken).ConfigureAwait(false);
+                            await WriteBackAssetTagAsync(runId, device, created.SnipeItAssetTag, writeBackIntune, writeBackIru, cancellationToken).ConfigureAwait(false);
                         }
                         else
                         {
@@ -164,6 +168,7 @@ public class SyncEngine : ISyncEngine
                     {
                         summary.Updated++;
                         await LogAsync(runId, LogLevel.Info, SourceSystem.SnipeIt, "update", device.SerialNumber, device.DeviceName, true, null, cancellationToken).ConfigureAwait(false);
+                        await WriteBackAssetTagAsync(runId, device, snipeAsset.SnipeItAssetTag, writeBackIntune, writeBackIru, cancellationToken).ConfigureAwait(false);
                     }
                     else
                     {
@@ -195,6 +200,25 @@ public class SyncEngine : ISyncEngine
         }
 
         return summary;
+    }
+
+    private async Task WriteBackAssetTagAsync(string runId, Device device, string? assetTag, bool writeBackIntune, bool writeBackIru, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(assetTag)) return;
+
+        if (writeBackIntune && !string.IsNullOrEmpty(device.AzureAdDeviceId) && device.PlatformSource == "Intune")
+        {
+            var ok = await _intuneService.WriteBackAssetTagAsync(device.AzureAdDeviceId, assetTag, cancellationToken).ConfigureAwait(false);
+            await LogAsync(runId, ok ? LogLevel.Info : LogLevel.Warning, SourceSystem.Intune, "write_back",
+                device.SerialNumber, device.DeviceName, ok, ok ? $"Asset tag '{assetTag}' written to Intune" : "Write-back to Intune failed", cancellationToken).ConfigureAwait(false);
+        }
+
+        if (writeBackIru && !string.IsNullOrEmpty(device.IruDeviceId) && device.PlatformSource == "Iru")
+        {
+            var ok = await _iruService.WriteBackAssetTagAsync(device.IruDeviceId, assetTag, cancellationToken).ConfigureAwait(false);
+            await LogAsync(runId, ok ? LogLevel.Info : LogLevel.Warning, SourceSystem.Iru, "write_back",
+                device.SerialNumber, device.DeviceName, ok, ok ? $"Asset tag '{assetTag}' written to Iru" : "Write-back to Iru failed", cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task LogAsync(string runId, LogLevel level, SourceSystem source, string action, string? serial, string? deviceName, bool success, string? errorDetail, CancellationToken cancellationToken)

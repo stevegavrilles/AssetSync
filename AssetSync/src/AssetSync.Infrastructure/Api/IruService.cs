@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using AssetSync.Core.Interfaces;
 using AssetSync.Core.Models;
@@ -64,5 +65,22 @@ public class IruService : IIruService
         }
 
         return list;
+    }
+
+    public async Task<bool> WriteBackAssetTagAsync(string iruDeviceId, string assetTag, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _getToken());
+            var payload = JsonSerializer.Serialize(new { asset_tag = assetTag });
+            var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            var response = await client.PatchAsync($"{_baseUrl}/api/v1/devices/{iruDeviceId}", content, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

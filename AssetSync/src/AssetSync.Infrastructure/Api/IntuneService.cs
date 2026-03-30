@@ -52,6 +52,25 @@ public class IntuneService : IIntuneService
         return list;
     }
 
+    public async Task<bool> WriteBackAssetTagAsync(string azureAdDeviceId, string assetTag, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var credential = new ClientSecretCredential(_tenantId, _clientId, _getClientSecret());
+            var authProvider = new AzureIdentityAuthenticationProvider(credential, scopes: new[] { "https://graph.microsoft.com/.default" });
+            var adapter = new HttpClientRequestAdapter(authProvider);
+            var client = new Microsoft.Graph.GraphServiceClient(adapter);
+
+            var body = new ManagedDevice { Notes = $"SnipeIT Asset Tag: {assetTag}" };
+            await client.DeviceManagement.ManagedDevices[azureAdDeviceId].PatchAsync(body, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static Task CollectPageAsync(ManagedDeviceCollectionResponse? page, List<Device> list)
     {
         if (page?.Value == null) return Task.CompletedTask;
