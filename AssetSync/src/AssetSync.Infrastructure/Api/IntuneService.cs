@@ -55,7 +55,7 @@ public class IntuneService : IIntuneService
         return list;
     }
 
-    public async Task<bool> WriteBackAssetTagAsync(string azureAdDeviceId, string assetTag, string? existingNotes, CancellationToken cancellationToken = default)
+    public async Task<bool> WriteBackAssetTagAsync(string intuneDeviceId, string assetTag, string? existingNotes, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -84,13 +84,15 @@ public class IntuneService : IIntuneService
                 updatedNotes = tagLine;
             }
 
+            // Uses the Intune managed device ID (m.Id), NOT the Azure AD device ID
             var body = new ManagedDevice { Notes = updatedNotes };
-            await client.DeviceManagement.ManagedDevices[azureAdDeviceId].PatchAsync(body, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await client.DeviceManagement.ManagedDevices[intuneDeviceId].PatchAsync(body, cancellationToken: cancellationToken).ConfigureAwait(false);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            // Re-throw so SyncEngine can log the real error detail
+            throw new InvalidOperationException($"Intune write-back failed for device {intuneDeviceId}: {ex.Message}", ex);
         }
     }
 
@@ -120,7 +122,8 @@ public class IntuneService : IIntuneService
                 AzureAdDeviceId = m.AzureADDeviceId,
                 OperatingSystem = m.OperatingSystem,
                 MdmAssetTag = mdmAssetTag,
-                IntuneNotes = m.Notes
+                IntuneNotes = m.Notes,
+                IntuneDeviceId = m.Id
             });
         }
         return Task.CompletedTask;

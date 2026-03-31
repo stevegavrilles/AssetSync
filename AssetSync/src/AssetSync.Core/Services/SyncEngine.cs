@@ -253,11 +253,19 @@ public class SyncEngine : ISyncEngine
         // Only write back PM-standard tags (PMxxxxxxx) — never TEMP tags or blank values
         if (string.IsNullOrEmpty(assetTag) || !PmTagRegex.IsMatch(assetTag)) return;
 
-        if (writeBackIntune && !string.IsNullOrEmpty(device.AzureAdDeviceId) && device.PlatformSource == "Intune")
+        if (writeBackIntune && !string.IsNullOrEmpty(device.IntuneDeviceId) && device.PlatformSource == "Intune")
         {
-            var ok = await _intuneService.WriteBackAssetTagAsync(device.AzureAdDeviceId, assetTag, device.IntuneNotes, cancellationToken).ConfigureAwait(false);
-            await LogAsync(runId, ok ? LogLevel.Info : LogLevel.Warning, SourceSystem.Intune, "write_back",
-                device.SerialNumber, device.DeviceName, ok, ok ? $"Asset tag '{assetTag}' written to Intune notes" : "Write-back to Intune failed", cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _intuneService.WriteBackAssetTagAsync(device.IntuneDeviceId, assetTag, device.IntuneNotes, cancellationToken).ConfigureAwait(false);
+                await LogAsync(runId, LogLevel.Info, SourceSystem.Intune, "write_back",
+                    device.SerialNumber, device.DeviceName, true, $"Asset tag '{assetTag}' written to Intune notes", cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                await LogAsync(runId, LogLevel.Warning, SourceSystem.Intune, "write_back",
+                    device.SerialNumber, device.DeviceName, false, ex.Message, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         if (writeBackIru && !string.IsNullOrEmpty(device.IruDeviceId) && device.PlatformSource == "Iru")

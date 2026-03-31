@@ -27,4 +27,6 @@ public class Device
     public string? MdmAssetTag { get; set; }
     /// <summary>Raw Notes field from Intune — preserved so write-back can update the tag without clobbering other note content.</summary>
     public string? IntuneNotes { get; set; }
+    /// <summary>Intune managed device ID (m.Id) — required for PATCH DeviceManagement.ManagedDevices[id]. Distinct from AzureAdDeviceId.</summary>
+    public string? IntuneDeviceId { get; set; }
 }

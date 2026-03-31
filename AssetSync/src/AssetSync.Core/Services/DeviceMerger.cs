@@ -71,7 +71,8 @@ public class DeviceMerger
             IruDeviceId = d.IruDeviceId,
             OperatingSystem = d.OperatingSystem,
             MdmAssetTag = d.MdmAssetTag,
-            IntuneNotes = d.IntuneNotes
+            IntuneNotes = d.IntuneNotes,
+            IntuneDeviceId = d.IntuneDeviceId
         };
     }
 
@@ -96,6 +97,7 @@ public class DeviceMerger
             // Prefer whichever side has a valid PM-format asset tag
             if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
             if (string.IsNullOrEmpty(target.IntuneNotes) && !string.IsNullOrEmpty(source.IntuneNotes)) target.IntuneNotes = source.IntuneNotes;
+            if (string.IsNullOrEmpty(target.IntuneDeviceId) && !string.IsNullOrEmpty(source.IntuneDeviceId)) target.IntuneDeviceId = source.IntuneDeviceId;
         }
         else
         {
@@ -116,6 +118,7 @@ public class DeviceMerger
             // Prefer whichever side has a valid PM-format asset tag
             if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
             if (string.IsNullOrEmpty(target.IntuneNotes) && !string.IsNullOrEmpty(source.IntuneNotes)) target.IntuneNotes = source.IntuneNotes;
+            if (string.IsNullOrEmpty(target.IntuneDeviceId) && !string.IsNullOrEmpty(source.IntuneDeviceId)) target.IntuneDeviceId = source.IntuneDeviceId;
         }
     }
 }
