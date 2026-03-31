@@ -59,7 +59,16 @@
                     <StackPanel Margin="8">
                         <TextBlock Text="Sync Interval (hours)" Margin="0,0,0,4"/>
                         <TextBox Text="{Binding SyncIntervalHours, UpdateSourceTrigger=PropertyChanged}" Width="100" HorizontalAlignment="Left" Margin="0,0,0,12"/>
-                        <CheckBox Content="Dry run by default" IsChecked="{Binding DryRunDefault}" Margin="0,0,0,8"/>
+                        <CheckBox Content="Dry run by default" IsChecked="{Binding DryRunDefault}" Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Sync Priority" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                        <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,10" FontSize="12">
+                            <Run Text="When OFF (default): Snipe-IT wins — MDM only fills in empty fields."/>
+                            <LineBreak/>
+                            <Run Text="When ON: MDM wins — MDM data overwrites existing Snipe-IT values."/>
+                        </TextBlock>
+                        <CheckBox Content="Intune data overwrites Snipe-IT" IsChecked="{Binding IntuneMdmWins}" Margin="0,0,0,8"/>
+                        <CheckBox Content="Iru (Kandji) data overwrites Snipe-IT" IsChecked="{Binding IruMdmWins}" Margin="0,0,0,8"/>
                     </StackPanel>
                 </TabItem>
 

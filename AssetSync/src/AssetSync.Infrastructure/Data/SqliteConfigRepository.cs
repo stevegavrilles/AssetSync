@@ -9,6 +9,8 @@ public class SqliteConfigRepository : IConfigRepository
     private const string DryRunDefaultKey = "dry_run_default";
     private const string WriteBackIntuneKey = "write_back_intune";
     private const string WriteBackIruKey = "write_back_iru";
+    private const string IntuneMdmWinsKey = "sync_intune_mdm_wins";
+    private const string IruMdmWinsKey = "sync_iru_mdm_wins";
 
     private readonly string _connectionString;
 
@@ -81,5 +83,27 @@ public class SqliteConfigRepository : IConfigRepository
     public async Task SetWriteBackIruEnabledAsync(bool value, CancellationToken cancellationToken = default)
     {
         await SetAsync(WriteBackIruKey, value ? "1" : "0", cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> GetIntuneMdmWinsAsync(CancellationToken cancellationToken = default)
+    {
+        var v = await GetAsync(IntuneMdmWinsKey, cancellationToken).ConfigureAwait(false);
+        return v == "1" || string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task SetIntuneMdmWinsAsync(bool value, CancellationToken cancellationToken = default)
+    {
+        await SetAsync(IntuneMdmWinsKey, value ? "1" : "0", cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> GetIruMdmWinsAsync(CancellationToken cancellationToken = default)
+    {
+        var v = await GetAsync(IruMdmWinsKey, cancellationToken).ConfigureAwait(false);
+        return v == "1" || string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task SetIruMdmWinsAsync(bool value, CancellationToken cancellationToken = default)
+    {
+        await SetAsync(IruMdmWinsKey, value ? "1" : "0", cancellationToken).ConfigureAwait(false);
     }
 }

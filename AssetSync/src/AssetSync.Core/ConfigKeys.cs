@@ -10,6 +10,8 @@ public static class ConfigKeys
     public const string WebhookType = "webhook_type";
     public const string LogRetentionDays = "log_retention_days";
     public const string SetupComplete = "setup_complete";
+    public const string IntuneMdmWins = "sync_intune_mdm_wins";
+    public const string IruMdmWins = "sync_iru_mdm_wins";
 }
 
 public static class CredentialKeys

@@ -37,6 +37,10 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _writeBackIntuneEnabled;
     [ObservableProperty] private bool _writeBackIruEnabled;
 
+    // Sync Priority
+    [ObservableProperty] private bool _intuneMdmWins;
+    [ObservableProperty] private bool _iruMdmWins;
+
     // Notifications
     [ObservableProperty] private string _webhookUrl = "";
     [ObservableProperty] private string _webhookType = "Generic";
@@ -74,6 +78,8 @@ public partial class SettingsViewModel : ObservableObject
         DryRunDefault = await _config.GetDryRunDefaultAsync();
         WriteBackIntuneEnabled = await _config.GetWriteBackIntuneEnabledAsync();
         WriteBackIruEnabled = await _config.GetWriteBackIruEnabledAsync();
+        IntuneMdmWins = await _config.GetIntuneMdmWinsAsync();
+        IruMdmWins = await _config.GetIruMdmWinsAsync();
         WebhookUrl = await _config.GetAsync(ConfigKeys.WebhookUrl) ?? "";
         WebhookType = await _config.GetAsync(ConfigKeys.WebhookType) ?? "Generic";
         var retention = await _config.GetAsync(ConfigKeys.LogRetentionDays);
@@ -98,6 +104,8 @@ public partial class SettingsViewModel : ObservableObject
             await _config.SetDryRunDefaultAsync(DryRunDefault);
             await _config.SetWriteBackIntuneEnabledAsync(WriteBackIntuneEnabled);
             await _config.SetWriteBackIruEnabledAsync(WriteBackIruEnabled);
+            await _config.SetIntuneMdmWinsAsync(IntuneMdmWins);
+            await _config.SetIruMdmWinsAsync(IruMdmWins);
             await _config.SetAsync(ConfigKeys.WebhookUrl, WebhookUrl);
             await _config.SetAsync(ConfigKeys.WebhookType, WebhookType);
             await _config.SetAsync(ConfigKeys.LogRetentionDays, LogRetentionDays.ToString());

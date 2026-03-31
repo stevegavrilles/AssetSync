@@ -103,6 +103,8 @@ public class SyncEngine : ISyncEngine
 
             var writeBackIntune = await _configRepository.GetWriteBackIntuneEnabledAsync(cancellationToken).ConfigureAwait(false);
             var writeBackIru = await _configRepository.GetWriteBackIruEnabledAsync(cancellationToken).ConfigureAwait(false);
+            var intuneMdmWins = await _configRepository.GetIntuneMdmWinsAsync(cancellationToken).ConfigureAwait(false);
+            var iruMdmWins = await _configRepository.GetIruMdmWinsAsync(cancellationToken).ConfigureAwait(false);
 
             var merged = _merger.Merge(intuneList, iruList);
 
@@ -159,7 +161,11 @@ public class SyncEngine : ISyncEngine
                 }
 
                 var snipeAsset = existing[0];
-                var resolvedUpdates = _resolver.GetUpdatesToApply(snipeAsset, device);
+                // Determine MDM priority based on the device's primary platform source
+                var mdmWins = device.PlatformSource == "Intune" ? intuneMdmWins
+                            : device.PlatformSource == "Iru"    ? iruMdmWins
+                            : (!string.IsNullOrEmpty(device.IruDeviceId) ? iruMdmWins : intuneMdmWins);
+                var resolvedUpdates = _resolver.GetUpdatesToApply(snipeAsset, device, mdmWins);
                 var discrepancies = _resolver.GetDiscrepancies(snipeAsset, device);
                 foreach (var (field, snipeVal, mdmVal) in discrepancies)
                     await LogAsync(runId, LogLevel.Warning, SourceSystem.Application, "skip", device.SerialNumber, device.DeviceName, true, $"Discrepancy {field}: Snipe-IT={snipeVal} MDM={mdmVal}", cancellationToken).ConfigureAwait(false);

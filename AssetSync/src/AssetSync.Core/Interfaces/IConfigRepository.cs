@@ -12,4 +12,8 @@ public interface IConfigRepository
     Task SetWriteBackIntuneEnabledAsync(bool value, CancellationToken cancellationToken = default);
     Task<bool> GetWriteBackIruEnabledAsync(CancellationToken cancellationToken = default);
     Task SetWriteBackIruEnabledAsync(bool value, CancellationToken cancellationToken = default);
+    Task<bool> GetIntuneMdmWinsAsync(CancellationToken cancellationToken = default);
+    Task SetIntuneMdmWinsAsync(bool value, CancellationToken cancellationToken = default);
+    Task<bool> GetIruMdmWinsAsync(CancellationToken cancellationToken = default);
+    Task SetIruMdmWinsAsync(bool value, CancellationToken cancellationToken = default);
 }
