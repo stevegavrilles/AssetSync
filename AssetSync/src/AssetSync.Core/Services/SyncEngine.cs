@@ -250,20 +250,21 @@ public class SyncEngine : ISyncEngine
 
     private async Task WriteBackAssetTagAsync(string runId, Device device, string? assetTag, bool writeBackIntune, bool writeBackIru, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(assetTag)) return;
+        // Only write back PM-standard tags (PMxxxxxxx) — never TEMP tags or blank values
+        if (string.IsNullOrEmpty(assetTag) || !PmTagRegex.IsMatch(assetTag)) return;
 
         if (writeBackIntune && !string.IsNullOrEmpty(device.AzureAdDeviceId) && device.PlatformSource == "Intune")
         {
-            var ok = await _intuneService.WriteBackAssetTagAsync(device.AzureAdDeviceId, assetTag, cancellationToken).ConfigureAwait(false);
+            var ok = await _intuneService.WriteBackAssetTagAsync(device.AzureAdDeviceId, assetTag, device.IntuneNotes, cancellationToken).ConfigureAwait(false);
             await LogAsync(runId, ok ? LogLevel.Info : LogLevel.Warning, SourceSystem.Intune, "write_back",
-                device.SerialNumber, device.DeviceName, ok, ok ? $"Asset tag '{assetTag}' written to Intune" : "Write-back to Intune failed", cancellationToken).ConfigureAwait(false);
+                device.SerialNumber, device.DeviceName, ok, ok ? $"Asset tag '{assetTag}' written to Intune notes" : "Write-back to Intune failed", cancellationToken).ConfigureAwait(false);
         }
 
         if (writeBackIru && !string.IsNullOrEmpty(device.IruDeviceId) && device.PlatformSource == "Iru")
         {
             var ok = await _iruService.WriteBackAssetTagAsync(device.IruDeviceId, assetTag, cancellationToken).ConfigureAwait(false);
             await LogAsync(runId, ok ? LogLevel.Info : LogLevel.Warning, SourceSystem.Iru, "write_back",
-                device.SerialNumber, device.DeviceName, ok, ok ? $"Asset tag '{assetTag}' written to Iru" : "Write-back to Iru failed", cancellationToken).ConfigureAwait(false);
+                device.SerialNumber, device.DeviceName, ok, ok ? $"Asset tag '{assetTag}' written to Iru asset_tag field" : "Write-back to Iru failed", cancellationToken).ConfigureAwait(false);
         }
     }
 

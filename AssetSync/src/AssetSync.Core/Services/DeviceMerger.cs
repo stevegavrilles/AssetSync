@@ -70,7 +70,8 @@ public class DeviceMerger
             AzureAdDeviceId = d.AzureAdDeviceId,
             IruDeviceId = d.IruDeviceId,
             OperatingSystem = d.OperatingSystem,
-            MdmAssetTag = d.MdmAssetTag
+            MdmAssetTag = d.MdmAssetTag,
+            IntuneNotes = d.IntuneNotes
         };
     }
 
@@ -94,6 +95,7 @@ public class DeviceMerger
             if (string.IsNullOrEmpty(target.IruDeviceId) && !string.IsNullOrEmpty(source.IruDeviceId)) target.IruDeviceId = source.IruDeviceId;
             // Prefer whichever side has a valid PM-format asset tag
             if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
+            if (string.IsNullOrEmpty(target.IntuneNotes) && !string.IsNullOrEmpty(source.IntuneNotes)) target.IntuneNotes = source.IntuneNotes;
         }
         else
         {
@@ -113,6 +115,7 @@ public class DeviceMerger
             if (string.IsNullOrEmpty(target.IruDeviceId) && !string.IsNullOrEmpty(source.IruDeviceId)) target.IruDeviceId = source.IruDeviceId;
             // Prefer whichever side has a valid PM-format asset tag
             if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
+            if (string.IsNullOrEmpty(target.IntuneNotes) && !string.IsNullOrEmpty(source.IntuneNotes)) target.IntuneNotes = source.IntuneNotes;
         }
     }
 }

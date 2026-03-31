@@ -25,4 +25,6 @@ public class Device
     public string? OperatingSystem { get; set; }
     /// <summary>Asset tag as reported by the MDM platform (Intune Notes or Kandji asset_tag field).</summary>
     public string? MdmAssetTag { get; set; }
+    /// <summary>Raw Notes field from Intune — preserved so write-back can update the tag without clobbering other note content.</summary>
+    public string? IntuneNotes { get; set; }
 }

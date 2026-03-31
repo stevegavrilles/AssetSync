@@ -55,7 +55,7 @@ public class IntuneService : IIntuneService
         return list;
     }
 
-    public async Task<bool> WriteBackAssetTagAsync(string azureAdDeviceId, string assetTag, CancellationToken cancellationToken = default)
+    public async Task<bool> WriteBackAssetTagAsync(string azureAdDeviceId, string assetTag, string? existingNotes, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -64,7 +64,27 @@ public class IntuneService : IIntuneService
             var adapter = new HttpClientRequestAdapter(authProvider);
             var client = new Microsoft.Graph.GraphServiceClient(adapter);
 
-            var body = new ManagedDevice { Notes = $"SnipeIT Asset Tag: {assetTag}" };
+            // Build updated notes: replace existing PM tag line if present, otherwise append
+            string updatedNotes;
+            var tagLine = $"Asset Tag: {assetTag}";
+            if (!string.IsNullOrEmpty(existingNotes))
+            {
+                // Replace any existing "Asset Tag: PMxxxxxxx" line, or append if not found
+                var replaced = System.Text.RegularExpressions.Regex.Replace(
+                    existingNotes,
+                    @"Asset Tag:\s*PM\d{7}",
+                    tagLine,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                updatedNotes = replaced == existingNotes
+                    ? existingNotes.TrimEnd() + "\n" + tagLine
+                    : replaced;
+            }
+            else
+            {
+                updatedNotes = tagLine;
+            }
+
+            var body = new ManagedDevice { Notes = updatedNotes };
             await client.DeviceManagement.ManagedDevices[azureAdDeviceId].PatchAsync(body, cancellationToken: cancellationToken).ConfigureAwait(false);
             return true;
         }
@@ -99,7 +119,8 @@ public class IntuneService : IIntuneService
                 PlatformSource = "Intune",
                 AzureAdDeviceId = m.AzureADDeviceId,
                 OperatingSystem = m.OperatingSystem,
-                MdmAssetTag = mdmAssetTag
+                MdmAssetTag = mdmAssetTag,
+                IntuneNotes = m.Notes
             });
         }
         return Task.CompletedTask;
