@@ -29,42 +29,66 @@ public class SnipeItService : ISnipeItService
 
     public async Task<IReadOnlyList<Device>> SearchAssetsBySerialAsync(string searchTerm, CancellationToken cancellationToken = default)
     {
-        var url = $"{_baseUrl}/api/v1/hardware?search={Uri.EscapeDataString(searchTerm)}";
+        // Use the dedicated byserial endpoint for exact matching — avoids broad search misses
+        var url = $"{_baseUrl}/api/v1/hardware/byserial/{Uri.EscapeDataString(searchTerm)}";
         var response = await SendWithRetryAsync(HttpMethod.Get, url, null, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+
+        // 404 means no asset found — not an error
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return new List<Device>();
+
+        if (!response.IsSuccessStatusCode)
+            return new List<Device>();
+
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+
+        // byserial can return a single object or a {"rows":[...]} collection
         JsonElement rows;
         if (root.ValueKind == JsonValueKind.Array)
             rows = root;
-        else if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("rows", out var rowsEl))
+        else if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("rows", out var rowsEl) && rowsEl.ValueKind == JsonValueKind.Array)
             rows = rowsEl;
+        else if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("id", out _))
+        {
+            // Single asset returned directly
+            var single = ParseDevice(root);
+            return single != null ? new List<Device> { single } : new List<Device>();
+        }
         else
             return new List<Device>();
+
         var list = new List<Device>();
         if (rows.ValueKind != JsonValueKind.Array) return list;
         foreach (var r in rows.EnumerateArray())
         {
             if (r.ValueKind != JsonValueKind.Object) continue;
-            var id = r.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
-            var serial = r.TryGetProperty("serial", out var s) ? s.GetString() : null;
-            var name = r.TryGetProperty("name", out var n) ? n.GetString() : null;
-            var modelId = r.TryGetProperty("model", out var mo) && mo.ValueKind == JsonValueKind.Object && mo.TryGetProperty("id", out var mid) ? mid.GetInt32() : (int?)null;
-            var assignedTo = r.TryGetProperty("assigned_to", out var at) && at.ValueKind == JsonValueKind.Object && at.TryGetProperty("id", out var aid) ? aid.GetInt32() : (int?)null;
-            var assetTag = r.TryGetProperty("asset_tag", out var tag) ? tag.GetString() : null;
-            list.Add(new Device
-            {
-                SnipeItAssetId = id,
-                SerialNumber = serial,
-                NormalizedSerial = serial != null ? Core.Services.SerialNumberNormalizer.Normalize(serial) : "",
-                DeviceName = name,
-                SnipeItModelId = modelId,
-                SnipeItAssignedUserId = assignedTo,
-                SnipeItAssetTag = assetTag
-            });
+            var device = ParseDevice(r);
+            if (device != null) list.Add(device);
         }
         return list;
+    }
+
+    private static Device? ParseDevice(JsonElement r)
+    {
+        if (r.ValueKind != JsonValueKind.Object) return null;
+        var id = r.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
+        var serial = r.TryGetProperty("serial", out var s) ? s.GetString() : null;
+        var name = r.TryGetProperty("name", out var n) ? n.GetString() : null;
+        var modelId = r.TryGetProperty("model", out var mo) && mo.ValueKind == JsonValueKind.Object && mo.TryGetProperty("id", out var mid) ? mid.GetInt32() : (int?)null;
+        var assignedTo = r.TryGetProperty("assigned_to", out var at) && at.ValueKind == JsonValueKind.Object && at.TryGetProperty("id", out var aid) ? aid.GetInt32() : (int?)null;
+        var assetTag = r.TryGetProperty("asset_tag", out var tag) ? tag.GetString() : null;
+        return new Device
+        {
+            SnipeItAssetId = id,
+            SerialNumber = serial,
+            NormalizedSerial = serial != null ? Core.Services.SerialNumberNormalizer.Normalize(serial) : "",
+            DeviceName = name,
+            SnipeItModelId = modelId,
+            SnipeItAssignedUserId = assignedTo,
+            SnipeItAssetTag = assetTag
+        };
     }
 
     public async Task<Device?> CreateAssetAsync(Device device, CancellationToken cancellationToken = default)
