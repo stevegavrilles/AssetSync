@@ -13,6 +13,9 @@ public partial class DashboardViewModel : ObservableObject
     private readonly IConfigRepository _config;
     private readonly ILogRepository _logRepository;
 
+    private System.Threading.Timer? _autoSyncTimer;
+    private DateTimeOffset _nextSyncDue = DateTimeOffset.MaxValue;
+
     // Connection status
     [ObservableProperty] private string _snipeItStatus = "Unknown";
     [ObservableProperty] private string _intuneStatus = "Unknown";
@@ -48,6 +51,27 @@ public partial class DashboardViewModel : ObservableObject
     {
         await RefreshConnectionStatusAsync();
         await LoadLastSyncInfoAsync();
+        StartAutoSyncTimer();
+    }
+
+    private void StartAutoSyncTimer()
+    {
+        // Check every minute whether a scheduled sync is due
+        _autoSyncTimer = new System.Threading.Timer(OnAutoSyncTick, null,
+            TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+    }
+
+    private void OnAutoSyncTick(object? state)
+    {
+        if (IsSyncing) return;
+        if (DateTimeOffset.UtcNow < _nextSyncDue) return;
+
+        // Dispatch back to the UI thread to run the sync
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () =>
+        {
+            if (!IsSyncing)
+                await RunSyncAsync(false, CancellationToken.None);
+        });
     }
 
     private bool CanSync() => !IsSyncing;
@@ -140,7 +164,14 @@ public partial class DashboardViewModel : ObservableObject
         if (entries.Count > 0)
         {
             var next = entries[0].TimestampUtc.AddHours(interval);
+            _nextSyncDue = next;
             NextSyncText = $"Next sync: {next.LocalDateTime:g}";
+        }
+        else
+        {
+            // No previous sync — fire immediately on first tick
+            _nextSyncDue = DateTimeOffset.UtcNow;
+            NextSyncText = "Next sync: scheduled";
         }
     }
 
