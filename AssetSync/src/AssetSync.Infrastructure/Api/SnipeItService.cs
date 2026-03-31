@@ -105,9 +105,12 @@ public class SnipeItService : ISnipeItService
             payload["assigned_to"] = device.SnipeItAssignedUserId.Value;
         if (device.SnipeItCategoryId.HasValue)
             payload["category_id"] = device.SnipeItCategoryId.Value;
-        // Include MDM asset tag in the create request if it's a valid PM-format tag
-        if (!string.IsNullOrEmpty(device.MdmAssetTag))
-            payload["asset_tag"] = device.MdmAssetTag;
+        // Use the MDM asset tag if present, otherwise generate a unique TEMP tag (e.g. TEMP12345678)
+        // Snipe-IT requires an asset_tag on create
+        var assetTag = !string.IsNullOrEmpty(device.MdmAssetTag)
+            ? device.MdmAssetTag
+            : $"TEMP{Random.Shared.Next(0, 99_999_999):D8}";
+        payload["asset_tag"] = assetTag;
 
         var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         var response = await SendWithRetryAsync(HttpMethod.Post, $"{_baseUrl}/api/v1/hardware", body, cancellationToken).ConfigureAwait(false);
