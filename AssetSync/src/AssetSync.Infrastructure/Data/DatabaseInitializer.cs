@@ -72,6 +72,13 @@ public class DatabaseInitializer
             );");
 
         Execute(conn, @"
+            CREATE TABLE IF NOT EXISTS model_ignores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mdm_model_string TEXT NOT NULL UNIQUE,
+                ignored_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );");
+
+        Execute(conn, @"
             CREATE TABLE IF NOT EXISTS credentials (
                 key TEXT PRIMARY KEY,
                 encrypted_value BLOB NOT NULL

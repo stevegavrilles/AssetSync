@@ -87,17 +87,31 @@
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
 
-                            <!-- Snipe-IT Model Picker (ComboBox — always visible) -->
-                            <DataGridTemplateColumn Header="Map to Snipe-IT Model" Width="300">
+                            <!-- Snipe-IT Model Picker — non-editable for reliable SelectedItem binding -->
+                            <DataGridTemplateColumn Header="Map to Snipe-IT Model" Width="280">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <ComboBox ItemsSource="{Binding DataContext.SnipeItModels,
                                                       RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                  SelectedItem="{Binding SelectedSnipeItModel, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedItem="{Binding SelectedSnipeItModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                   DisplayMemberPath="Name"
-                                                  Margin="2,2"
-                                                  IsEditable="True"
-                                                  StaysOpenOnEdit="True"/>
+                                                  IsTextSearchEnabled="True"
+                                                  IsTextSearchCaseSensitive="False"
+                                                  Margin="2,2"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Ignore button -->
+                            <DataGridTemplateColumn Header="" Width="70">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="Ignore"
+                                                Command="{Binding DataContext.IgnoreModelCommand,
+                                                    RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"
+                                                Padding="4,2" FontSize="11"
+                                                Background="#F3F3F3"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
@@ -295,6 +309,48 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="MDM Device Type" Binding="{Binding MdmDeviceType}" Width="*"/>
                             <DataGridTextColumn Header="Snipe-IT Category ID" Binding="{Binding SnipeItCategoryId}" Width="140"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Ignored Models Tab -->
+            <TabItem Header="Ignored">
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="#555"
+                               FontSize="12" Margin="0,0,0,10">
+                        <Run Text="These MDM model strings are silently skipped during sync (no 'Pending' queue entries)."/>
+                        <LineBreak/>
+                        <Run Text="Click 'Restore' to move a model back to the Pending queue on the next sync."/>
+                    </TextBlock>
+                    <DataGrid ItemsSource="{Binding IgnoredModels}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="True"
+                              SelectionMode="Single"
+                              RowHeaderWidth="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="MDM Model String" Binding="{Binding}" Width="*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Setter Property="Padding" Value="4,0"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTemplateColumn Header="" Width="75">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="Restore"
+                                                Command="{Binding DataContext.RestoreModelCommand,
+                                                    RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"
+                                                Padding="4,2" FontSize="11"
+                                                Background="#E8F5E9" Foreground="#1B5E20"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

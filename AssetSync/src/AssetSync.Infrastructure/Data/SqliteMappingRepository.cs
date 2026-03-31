@@ -118,6 +118,50 @@ public class SqliteMappingRepository : IMappingRepository
     public Task DeleteBuildMappingAsync(int id, CancellationToken cancellationToken = default) => DeleteMappingAsync("build_mappings", id, cancellationToken);
     public Task DeleteCategoryMappingAsync(int id, CancellationToken cancellationToken = default) => DeleteMappingAsync("category_mappings", id, cancellationToken);
 
+    public async Task<IReadOnlyList<string>> GetIgnoredModelsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var conn = new SqliteConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT mdm_model_string FROM model_ignores ORDER BY mdm_model_string";
+        var list = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            list.Add(reader.GetString(0));
+        return list;
+    }
+
+    public async Task<bool> IsModelIgnoredAsync(string mdmModelString, CancellationToken cancellationToken = default)
+    {
+        await using var conn = new SqliteConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM model_ignores WHERE mdm_model_string = $m LIMIT 1";
+        cmd.Parameters.AddWithValue("$m", mdmModelString);
+        var result = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return result != null;
+    }
+
+    public async Task AddModelIgnoreAsync(string mdmModelString, CancellationToken cancellationToken = default)
+    {
+        await using var conn = new SqliteConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT OR IGNORE INTO model_ignores (mdm_model_string) VALUES ($m)";
+        cmd.Parameters.AddWithValue("$m", mdmModelString);
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RemoveModelIgnoreAsync(string mdmModelString, CancellationToken cancellationToken = default)
+    {
+        await using var conn = new SqliteConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM model_ignores WHERE mdm_model_string = $m";
+        cmd.Parameters.AddWithValue("$m", mdmModelString);
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task DeleteMappingAsync(string table, int id, CancellationToken cancellationToken)
     {
         await using var conn = new SqliteConnection(_connectionString);

@@ -20,6 +20,9 @@ public partial class MappingsViewModel : ObservableObject
     // --- Pending Mappings Grid ---
     public ObservableCollection<PendingMappingRow> PendingMappings { get; } = new();
 
+    // --- Ignored Models ---
+    public ObservableCollection<string> IgnoredModels { get; } = new();
+
     // Model Mappings
     public ObservableCollection<ModelMapping> ModelMappings { get; } = new();
     [ObservableProperty] private ModelMapping? _selectedModelMapping;
@@ -81,6 +84,7 @@ public partial class MappingsViewModel : ObservableObject
         await LoadUserMappingsAsync();
         await LoadBuildMappingsAsync();
         await LoadCategoryMappingsAsync();
+        await LoadIgnoredModelsAsync();
     }
 
     [RelayCommand]
@@ -179,6 +183,29 @@ public partial class MappingsViewModel : ObservableObject
         {
             IsLoading = false;
         }
+    }
+
+    [RelayCommand]
+    private async Task IgnoreModelAsync(PendingMappingRow row)
+    {
+        await _repo.AddModelIgnoreAsync(row.MdmModel);
+        PendingMappings.Remove(row);
+        await LoadIgnoredModelsAsync();
+        StatusMessage = $"'{row.MdmModel}' added to ignore list. It will be silently skipped in future syncs.";
+    }
+
+    [RelayCommand]
+    private async Task RestoreModelAsync(string mdmModel)
+    {
+        await _repo.RemoveModelIgnoreAsync(mdmModel);
+        IgnoredModels.Remove(mdmModel);
+        StatusMessage = $"'{mdmModel}' restored — it will appear in Pending on the next sync.";
+    }
+
+    private async Task LoadIgnoredModelsAsync()
+    {
+        IgnoredModels.Clear();
+        foreach (var m in await _repo.GetIgnoredModelsAsync()) IgnoredModels.Add(m);
     }
 
     [RelayCommand]

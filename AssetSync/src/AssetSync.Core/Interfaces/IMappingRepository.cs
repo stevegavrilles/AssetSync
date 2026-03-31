@@ -20,4 +20,10 @@ public interface IMappingRepository
     Task DeleteUserMappingAsync(int id, CancellationToken cancellationToken = default);
     Task DeleteBuildMappingAsync(int id, CancellationToken cancellationToken = default);
     Task DeleteCategoryMappingAsync(int id, CancellationToken cancellationToken = default);
+
+    // Model ignores — suppress noisy models (VMs, cloud instances, etc.)
+    Task<IReadOnlyList<string>> GetIgnoredModelsAsync(CancellationToken cancellationToken = default);
+    Task<bool> IsModelIgnoredAsync(string mdmModelString, CancellationToken cancellationToken = default);
+    Task AddModelIgnoreAsync(string mdmModelString, CancellationToken cancellationToken = default);
+    Task RemoveModelIgnoreAsync(string mdmModelString, CancellationToken cancellationToken = default);
 }

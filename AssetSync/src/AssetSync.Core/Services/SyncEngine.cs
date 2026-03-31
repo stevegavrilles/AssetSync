@@ -105,6 +105,9 @@ public class SyncEngine : ISyncEngine
             var writeBackIru = await _configRepository.GetWriteBackIruEnabledAsync(cancellationToken).ConfigureAwait(false);
             var intuneMdmWins = await _configRepository.GetIntuneMdmWinsAsync(cancellationToken).ConfigureAwait(false);
             var iruMdmWins = await _configRepository.GetIruMdmWinsAsync(cancellationToken).ConfigureAwait(false);
+            var ignoredModels = new HashSet<string>(
+                await _mappingRepository.GetIgnoredModelsAsync(cancellationToken).ConfigureAwait(false),
+                StringComparer.OrdinalIgnoreCase);
 
             var merged = _merger.Merge(intuneList, iruList);
 
@@ -127,7 +130,8 @@ public class SyncEngine : ISyncEngine
                     if (modelMapping == null)
                     {
                         summary.Skipped++;
-                        await LogAsync(runId, LogLevel.Warning, SourceSystem.Application, "skip", device.SerialNumber, device.DeviceName, true, $"Pending model mapping: {device.Model}", cancellationToken).ConfigureAwait(false);
+                        if (!ignoredModels.Contains(device.Model ?? ""))
+                            await LogAsync(runId, LogLevel.Warning, SourceSystem.Application, "skip", device.SerialNumber, device.DeviceName, true, $"Pending model mapping: {device.Model}", cancellationToken).ConfigureAwait(false);
                         continue;
                     }
                     device.SnipeItModelId = modelMapping.SnipeItModelId;
