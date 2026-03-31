@@ -143,17 +143,25 @@ public class SyncEngine : ISyncEngine
                         device.MdmAssetTag = device.MdmAssetTag!.ToUpperInvariant();
                     if (!dryRun)
                     {
-                        var created = await _snipeItService.CreateAssetAsync(device, cancellationToken).ConfigureAwait(false);
-                        if (created != null)
+                        try
                         {
-                            summary.Created++;
-                            await LogAsync(runId, LogLevel.Info, SourceSystem.SnipeIt, "create", device.SerialNumber, device.DeviceName, true, null, cancellationToken).ConfigureAwait(false);
-                            await WriteBackAssetTagAsync(runId, device, created.SnipeItAssetTag, writeBackIntune, writeBackIru, cancellationToken).ConfigureAwait(false);
+                            var created = await _snipeItService.CreateAssetAsync(device, cancellationToken).ConfigureAwait(false);
+                            if (created != null)
+                            {
+                                summary.Created++;
+                                await LogAsync(runId, LogLevel.Info, SourceSystem.SnipeIt, "create", device.SerialNumber, device.DeviceName, true, null, cancellationToken).ConfigureAwait(false);
+                                await WriteBackAssetTagAsync(runId, device, created.SnipeItAssetTag, writeBackIntune, writeBackIru, cancellationToken).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                summary.Errors++;
+                                await LogAsync(runId, LogLevel.Error, SourceSystem.SnipeIt, "error", device.SerialNumber, device.DeviceName, false, "Create failed", cancellationToken).ConfigureAwait(false);
+                            }
                         }
-                        else
+                        catch (InvalidOperationException ex)
                         {
                             summary.Errors++;
-                            await LogAsync(runId, LogLevel.Error, SourceSystem.SnipeIt, "error", device.SerialNumber, device.DeviceName, false, "Create failed", cancellationToken).ConfigureAwait(false);
+                            await LogAsync(runId, LogLevel.Error, SourceSystem.SnipeIt, "error", device.SerialNumber, device.DeviceName, false, ex.Message, cancellationToken).ConfigureAwait(false);
                         }
                     }
                     else

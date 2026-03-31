@@ -98,18 +98,40 @@ public class SnipeItService : ISnipeItService
             ["name"] = device.DeviceName ?? device.SerialNumber,
             ["serial"] = device.SerialNumber,
             ["model_id"] = device.SnipeItModelId,
-            ["assigned_to"] = device.SnipeItAssignedUserId,
-            ["category_id"] = device.SnipeItCategoryId
+            ["status_id"] = 1, // Default to "Ready to Deploy"
         };
+        // Only include optional fields when they have values — omitting null avoids Snipe-IT validation errors
+        if (device.SnipeItAssignedUserId.HasValue)
+            payload["assigned_to"] = device.SnipeItAssignedUserId.Value;
+        if (device.SnipeItCategoryId.HasValue)
+            payload["category_id"] = device.SnipeItCategoryId.Value;
         // Include MDM asset tag in the create request if it's a valid PM-format tag
         if (!string.IsNullOrEmpty(device.MdmAssetTag))
             payload["asset_tag"] = device.MdmAssetTag;
+
         var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         var response = await SendWithRetryAsync(HttpMethod.Post, $"{_baseUrl}/api/v1/hardware", body, cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode) return null;
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var doc = JsonDocument.Parse(responseJson);
+
+        // Snipe-IT returns HTTP 200 even on validation errors — check the status field in the body
+        JsonDocument doc;
+        try { doc = JsonDocument.Parse(responseJson); }
+        catch { return null; }
+
         var root = doc.RootElement;
+
+        // {"status":"error","messages":{...}} means the create failed
+        if (root.ValueKind == JsonValueKind.Object &&
+            root.TryGetProperty("status", out var statusEl) &&
+            statusEl.GetString() == "error")
+        {
+            // Surface the actual validation message so callers can log it
+            var messages = root.TryGetProperty("messages", out var msgEl) ? msgEl.GetRawText() : responseJson;
+            throw new InvalidOperationException($"Snipe-IT create rejected: {messages}");
+        }
+
+        if (!response.IsSuccessStatusCode) return null;
+
         var created = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("payload", out var p) ? p : root;
         var id = created.ValueKind == JsonValueKind.Object && created.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
         device.SnipeItAssetId = id;
