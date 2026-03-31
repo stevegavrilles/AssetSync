@@ -69,7 +69,8 @@ public class DeviceMerger
             SnipeItAssetTag = d.SnipeItAssetTag,
             AzureAdDeviceId = d.AzureAdDeviceId,
             IruDeviceId = d.IruDeviceId,
-            OperatingSystem = d.OperatingSystem
+            OperatingSystem = d.OperatingSystem,
+            MdmAssetTag = d.MdmAssetTag
         };
     }
 
@@ -91,6 +92,8 @@ public class DeviceMerger
             if (string.IsNullOrEmpty(target.SnipeItAssetTag) && !string.IsNullOrEmpty(source.SnipeItAssetTag)) target.SnipeItAssetTag = source.SnipeItAssetTag;
             if (string.IsNullOrEmpty(target.AzureAdDeviceId) && !string.IsNullOrEmpty(source.AzureAdDeviceId)) target.AzureAdDeviceId = source.AzureAdDeviceId;
             if (string.IsNullOrEmpty(target.IruDeviceId) && !string.IsNullOrEmpty(source.IruDeviceId)) target.IruDeviceId = source.IruDeviceId;
+            // Prefer whichever side has a valid PM-format asset tag
+            if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
         }
         else
         {
@@ -108,6 +111,8 @@ public class DeviceMerger
             if (string.IsNullOrEmpty(target.SnipeItAssetTag) && !string.IsNullOrEmpty(source.SnipeItAssetTag)) target.SnipeItAssetTag = source.SnipeItAssetTag;
             if (string.IsNullOrEmpty(target.AzureAdDeviceId) && !string.IsNullOrEmpty(source.AzureAdDeviceId)) target.AzureAdDeviceId = source.AzureAdDeviceId;
             if (string.IsNullOrEmpty(target.IruDeviceId) && !string.IsNullOrEmpty(source.IruDeviceId)) target.IruDeviceId = source.IruDeviceId;
+            // Prefer whichever side has a valid PM-format asset tag
+            if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
         }
     }
 }

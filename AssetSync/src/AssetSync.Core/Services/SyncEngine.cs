@@ -167,6 +167,12 @@ public class SyncEngine : ISyncEngine
                 // Build a mutable copy so we can inject the asset tag if needed
                 var updates = new Dictionary<string, object?>(resolvedUpdates);
 
+                // Diagnostic: always log what asset tags we see on both sides
+                await LogAsync(runId, LogLevel.Info, SourceSystem.Application, "asset_tag_diag",
+                    device.SerialNumber, device.DeviceName, true,
+                    $"MDM='{device.MdmAssetTag ?? "(none)"}' Snipe-IT='{snipeAsset.SnipeItAssetTag ?? "(none)"}'",
+                    cancellationToken).ConfigureAwait(false);
+
                 // If MDM has a valid PM-format asset tag and Snipe-IT's tag is missing or non-standard, push it in
                 if (IsStandardTag(device.MdmAssetTag) && !IsStandardTag(snipeAsset.SnipeItAssetTag))
                 {

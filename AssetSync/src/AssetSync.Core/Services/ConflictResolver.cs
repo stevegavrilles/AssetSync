@@ -3,18 +3,30 @@ using AssetSync.Core.Models;
 namespace AssetSync.Core.Services;
 
 /// <summary>
-/// Snipe-IT wins. Only fill empty Snipe-IT fields from MDM; never overwrite existing Snipe-IT data.
+/// Snipe-IT wins for user-managed fields. MDM overwrites placeholder/default names.
 /// </summary>
 public class ConflictResolver
 {
+    // Snipe-IT default/placeholder names that should be overwritten by MDM
+    private static readonly HashSet<string> PlaceholderNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Awaiting Enrollment",
+        "Pending Enrollment",
+        "Unknown",
+        "Unknown Device",
+        "No Name",
+        "New Asset"
+    };
+
     /// <summary>
-    /// Returns updates to apply: only keys where Snipe-IT value is null/empty and MDM has a value.
+    /// Returns updates to apply: fills empty Snipe-IT fields and replaces placeholder names from MDM.
     /// </summary>
     public IReadOnlyDictionary<string, object?> GetUpdatesToApply(Device snipeItAsset, Device mdmDevice)
     {
         var updates = new Dictionary<string, object?>();
 
-        if (IsEmpty(snipeItAsset.DeviceName) && !IsEmpty(mdmDevice.DeviceName))
+        // Overwrite if Snipe-IT name is empty OR a known placeholder
+        if ((IsEmpty(snipeItAsset.DeviceName) || PlaceholderNames.Contains(snipeItAsset.DeviceName!)) && !IsEmpty(mdmDevice.DeviceName))
             updates["name"] = mdmDevice.DeviceName;
         if (IsEmpty(snipeItAsset.SerialNumber) && !IsEmpty(mdmDevice.SerialNumber))
             updates["serial"] = mdmDevice.SerialNumber;
