@@ -105,11 +105,11 @@ public class SnipeItService : ISnipeItService
             payload["assigned_to"] = device.SnipeItAssignedUserId.Value;
         if (device.SnipeItCategoryId.HasValue)
             payload["category_id"] = device.SnipeItCategoryId.Value;
-        // Use the MDM asset tag if present, otherwise generate a unique TEMP tag (e.g. TEMP12345678)
-        // Snipe-IT requires an asset_tag on create
+        // Use the MDM asset tag if present, otherwise generate a unique TEMP tag (e.g. TEMP1A2B3C4D)
+        // Snipe-IT requires an asset_tag on create. Use GUID-derived hex for ~4B combinations.
         var assetTag = !string.IsNullOrEmpty(device.MdmAssetTag)
             ? device.MdmAssetTag
-            : $"TEMP{Random.Shared.Next(0, 99_999_999):D8}";
+            : $"TEMP{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
         payload["asset_tag"] = assetTag;
 
         var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
