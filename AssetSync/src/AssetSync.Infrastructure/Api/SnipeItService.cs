@@ -75,10 +75,11 @@ public class SnipeItService : ISnipeItService
         if (r.ValueKind != JsonValueKind.Object) return null;
         var id = r.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
         var serial = r.TryGetProperty("serial", out var s) ? s.GetString() : null;
-        var name = r.TryGetProperty("name", out var n) ? n.GetString() : null;
+        // Snipe-IT HTML-encodes special characters (e.g. apostrophes become &#039;) — decode before storing
+        var name = r.TryGetProperty("name", out var n) ? WebUtility.HtmlDecode(n.GetString()) : null;
         var modelId = r.TryGetProperty("model", out var mo) && mo.ValueKind == JsonValueKind.Object && mo.TryGetProperty("id", out var mid) ? mid.GetInt32() : (int?)null;
         var assignedTo = r.TryGetProperty("assigned_to", out var at) && at.ValueKind == JsonValueKind.Object && at.TryGetProperty("id", out var aid) ? aid.GetInt32() : (int?)null;
-        var assetTag = r.TryGetProperty("asset_tag", out var tag) ? tag.GetString() : null;
+        var assetTag = r.TryGetProperty("asset_tag", out var tag) ? WebUtility.HtmlDecode(tag.GetString()) : null;
         return new Device
         {
             SnipeItAssetId = id,
