@@ -3,34 +3,25 @@ using AssetSync.Core.Models;
 namespace AssetSync.Core.Services;
 
 /// <summary>
-/// Snipe-IT wins for user-managed fields. MDM overwrites placeholder/default names.
+/// MDM (Intune/Iru) is source of truth for device names.
+/// Snipe-IT is source of truth for asset tags.
 /// </summary>
 public class ConflictResolver
 {
-    // Snipe-IT default/placeholder names that should be overwritten by MDM
-    private static readonly HashSet<string> PlaceholderNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Awaiting Enrollment",
-        "Pending Enrollment",
-        "Unknown",
-        "Unknown Device",
-        "No Name",
-        "New Asset"
-    };
-
     /// <summary>
     /// Returns updates to apply.
-    /// mdmWins=false (default): only fills empty Snipe-IT fields (Snipe-IT wins).
-    /// mdmWins=true: MDM overwrites existing Snipe-IT fields as well (MDM wins).
+    /// Device name: MDM always wins — any name change in MDM is pushed to Snipe-IT.
+    /// Asset tag: Snipe-IT is source of truth (handled separately in SyncEngine).
+    /// Other fields: mdmWins=false fills empty Snipe-IT fields; mdmWins=true overwrites.
     /// Serial is never overwritten regardless of mode.
     /// </summary>
     public IReadOnlyDictionary<string, object?> GetUpdatesToApply(Device snipeItAsset, Device mdmDevice, bool mdmWins = false)
     {
         var updates = new Dictionary<string, object?>();
 
-        // Name: overwrite if empty, placeholder, or MDM wins
+        // Name: MDM is always source of truth — push whenever MDM has a value and it differs
         if (!IsEmpty(mdmDevice.DeviceName) &&
-            (IsEmpty(snipeItAsset.DeviceName) || PlaceholderNames.Contains(snipeItAsset.DeviceName!) || mdmWins))
+            !string.Equals(snipeItAsset.DeviceName, mdmDevice.DeviceName, StringComparison.Ordinal))
             updates["name"] = mdmDevice.DeviceName;
 
         // Serial: never overwrite an existing value regardless of mode
@@ -52,13 +43,12 @@ public class ConflictResolver
     }
 
     /// <summary>
-    /// Returns discrepancies where Snipe-IT has a value and MDM differs (for logging only; we do not overwrite).
+    /// Returns discrepancies where Snipe-IT has a value and MDM differs (for logging only).
+    /// Name is excluded — MDM is authoritative for names and differences are auto-resolved.
     /// </summary>
     public IReadOnlyList<(string Field, string? SnipeItValue, string? MdmValue)> GetDiscrepancies(Device snipeItAsset, Device mdmDevice)
     {
         var list = new List<(string, string?, string?)>();
-        if (!IsEmpty(snipeItAsset.DeviceName) && !IsEmpty(mdmDevice.DeviceName) && snipeItAsset.DeviceName != mdmDevice.DeviceName)
-            list.Add(("name", snipeItAsset.DeviceName, mdmDevice.DeviceName));
         if (!IsEmpty(snipeItAsset.SerialNumber) && !IsEmpty(mdmDevice.SerialNumber) && snipeItAsset.SerialNumber != mdmDevice.SerialNumber)
             list.Add(("serial", snipeItAsset.SerialNumber, mdmDevice.SerialNumber));
         if (snipeItAsset.SnipeItModelId != null && mdmDevice.SnipeItModelId != null && snipeItAsset.SnipeItModelId != mdmDevice.SnipeItModelId)
