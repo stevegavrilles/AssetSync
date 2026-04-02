@@ -262,11 +262,10 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            using var sc = new ServiceController(ServiceName);
-            sc.Start();
-            sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
+            RunElevated("sc.exe", $"start {ServiceName}");
+            System.Threading.Thread.Sleep(2000);
             RefreshServiceStatus();
-            ServiceMessage = "Service started.";
+            ServiceMessage = ServiceRunning ? "Service started." : "Start may have failed — check Event Viewer for details.";
         }
         catch (Exception ex) { ServiceMessage = $"Start failed: {ex.Message}"; }
     }
@@ -276,11 +275,10 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            using var sc = new ServiceController(ServiceName);
-            sc.Stop();
-            sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
+            RunElevated("sc.exe", $"stop {ServiceName}");
+            System.Threading.Thread.Sleep(2000);
             RefreshServiceStatus();
-            ServiceMessage = "Service stopped.";
+            ServiceMessage = !ServiceRunning ? "Service stopped." : "Stop may have failed — check Event Viewer for details.";
         }
         catch (Exception ex) { ServiceMessage = $"Stop failed: {ex.Message}"; }
     }
