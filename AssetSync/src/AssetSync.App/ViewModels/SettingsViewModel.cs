@@ -218,21 +218,28 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            // Extract the embedded service exe to ProgramData\AssetSync\
+            var asm = Assembly.GetExecutingAssembly();
             var dir = Path.GetDirectoryName(ServiceInstallPath)!;
             Directory.CreateDirectory(dir);
 
-            using var stream = Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("AssetSync.Service.exe");
-
-            if (stream == null)
+            // Extract service exe
+            using var exeStream = asm.GetManifestResourceStream("AssetSync.Service.exe");
+            if (exeStream == null)
             {
                 ServiceMessage = "Service bundle not found in application. Please rebuild from source.";
                 return;
             }
-
             using (var fs = File.Create(ServiceInstallPath))
-                stream.CopyTo(fs);
+                exeStream.CopyTo(fs);
+
+            // Extract native SQLite DLL alongside the exe (required — cannot be bundled into single-file for services)
+            using var dllStream = asm.GetManifestResourceStream("e_sqlite3.dll");
+            if (dllStream != null)
+            {
+                var dllPath = Path.Combine(dir, "e_sqlite3.dll");
+                using var fs = File.Create(dllPath);
+                dllStream.CopyTo(fs);
+            }
 
             RunElevated("sc.exe", $"create {ServiceName} binPath= \"{ServiceInstallPath}\" DisplayName= \"AssetSync Sync Service\" start= auto obj= LocalSystem");
             System.Threading.Thread.Sleep(1500);

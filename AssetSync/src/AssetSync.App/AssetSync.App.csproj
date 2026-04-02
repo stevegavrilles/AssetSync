@@ -24,11 +24,15 @@
     unlike top-level ItemGroups which are evaluated at project load time.
   -->
   <Target Name="EmbedServiceBundle" BeforeTargets="ResolveAssemblyReferences">
-    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\AssetSync.Service\AssetSync.Service.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o &quot;$(MSBuildThisFileDirectory)service_bundle&quot;"
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\AssetSync.Service\AssetSync.Service.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o &quot;$(MSBuildThisFileDirectory)service_bundle&quot;"
           Condition="!Exists('$(MSBuildThisFileDirectory)service_bundle\AssetSync.Service.exe')" />
     <ItemGroup>
+      <!-- Embed the service exe and its native SQLite DLL — both extracted to ProgramData on install -->
       <EmbeddedResource Include="$(MSBuildThisFileDirectory)service_bundle\AssetSync.Service.exe"
                         LogicalName="AssetSync.Service.exe" />
+      <EmbeddedResource Include="$(MSBuildThisFileDirectory)service_bundle\e_sqlite3.dll"
+                        LogicalName="e_sqlite3.dll"
+                        Condition="Exists('$(MSBuildThisFileDirectory)service_bundle\e_sqlite3.dll')" />
     </ItemGroup>
   </Target>
 
