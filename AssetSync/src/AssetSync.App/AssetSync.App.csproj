@@ -24,7 +24,7 @@
     unlike top-level ItemGroups which are evaluated at project load time.
   -->
   <Target Name="EmbedServiceBundle" BeforeTargets="ResolveAssemblyReferences">
-    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\AssetSync.Service\AssetSync.Service.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o &quot;$(MSBuildThisFileDirectory)service_bundle&quot;"
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\AssetSync.Service\AssetSync.Service.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o &quot;$(MSBuildThisFileDirectory)service_bundle&quot;"
           Condition="!Exists('$(MSBuildThisFileDirectory)service_bundle\AssetSync.Service.exe')" />
     <ItemGroup>
       <EmbeddedResource Include="$(MSBuildThisFileDirectory)service_bundle\AssetSync.Service.exe"
