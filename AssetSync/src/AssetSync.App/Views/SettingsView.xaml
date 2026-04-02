@@ -95,6 +95,57 @@
                     </StackPanel>
                 </TabItem>
 
+                <!-- Service Tab -->
+                <TabItem Header="Service">
+                    <StackPanel Margin="8">
+                        <TextBlock TextWrapping="Wrap" Foreground="#555" FontSize="12" Margin="0,0,0,12">
+                            <Run Text="The AssetSync background service runs scheduled syncs even when the application is closed. Install it as a Windows Service for always-on syncing."/>
+                        </TextBlock>
+
+                        <!-- Status -->
+                        <GroupBox Header="Service Status" Margin="0,0,0,12">
+                            <StackPanel Margin="8">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <Ellipse Width="12" Height="12" Fill="{Binding ServiceStatusColor}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding ServiceStatus}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <Button Content="Refresh" Command="{Binding RefreshServiceStatusCommand}" Margin="12,0,0,0" Padding="8,2"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding ServiceMessage}" Foreground="#555" FontSize="12"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Executable Path -->
+                        <GroupBox Header="Service Executable" Margin="0,0,0,12">
+                            <StackPanel Margin="8">
+                                <TextBlock Text="Path to AssetSync.Service.exe" Margin="0,0,0,4" FontSize="12" Foreground="#555"/>
+                                <TextBox Text="{Binding ServiceExePath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" FontFamily="Consolas" FontSize="12"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Controls -->
+                        <GroupBox Header="Controls" Margin="0,0,0,12">
+                            <StackPanel Margin="8" Orientation="Horizontal">
+                                <Button Content="Install" Command="{Binding InstallServiceCommand}"
+                                        IsEnabled="{Binding ServiceInstalled, Converter={StaticResource InverseBoolConverter}}"
+                                        Margin="0,0,8,0" Padding="12,4"/>
+                                <Button Content="Start" Command="{Binding StartServiceCommand}"
+                                        IsEnabled="{Binding ServiceRunning, Converter={StaticResource InverseBoolConverter}}"
+                                        Margin="0,0,8,0" Padding="12,4"/>
+                                <Button Content="Stop" Command="{Binding StopServiceCommand}"
+                                        IsEnabled="{Binding ServiceRunning}"
+                                        Margin="0,0,8,0" Padding="12,4"/>
+                                <Button Content="Uninstall" Command="{Binding UninstallServiceCommand}"
+                                        IsEnabled="{Binding ServiceInstalled}"
+                                        Padding="12,4"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <TextBlock TextWrapping="Wrap" Foreground="#888" FontSize="11">
+                            <Run Text="Install and Uninstall require administrator privileges. A UAC prompt will appear."/>
+                        </TextBlock>
+                    </StackPanel>
+                </TabItem>
+
                 <!-- Application Tab -->
                 <TabItem Header="Application">
                     <StackPanel Margin="8">

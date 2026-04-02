@@ -1,4 +1,7 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
+using System.ServiceProcess;
 using AssetSync.Core;
 using AssetSync.Core.Interfaces;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -49,6 +52,15 @@ public partial class SettingsViewModel : ObservableObject
     // Application
     [ObservableProperty] private int _logRetentionDays = 30;
 
+    // Service management
+    private const string ServiceName = "AssetSync";
+    [ObservableProperty] private string _serviceStatus = "Unknown";
+    [ObservableProperty] private string _serviceStatusColor = "Gray";
+    [ObservableProperty] private string _serviceExePath = "";
+    [ObservableProperty] private string _serviceMessage = "";
+    [ObservableProperty] private bool _serviceInstalled;
+    [ObservableProperty] private bool _serviceRunning;
+
     // State
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _statusMessage = "";
@@ -62,6 +74,7 @@ public partial class SettingsViewModel : ObservableObject
         _connectivity = connectivity;
         _webhookService = webhookService;
         _ = LoadSettingsAsync();
+        RefreshServiceStatus();
     }
 
     [RelayCommand]
@@ -84,6 +97,8 @@ public partial class SettingsViewModel : ObservableObject
         WebhookType = await _config.GetAsync(ConfigKeys.WebhookType) ?? "Generic";
         var retention = await _config.GetAsync(ConfigKeys.LogRetentionDays);
         LogRetentionDays = int.TryParse(retention, out var d) ? d : 30;
+        ServiceExePath = await _config.GetAsync(ConfigKeys.ServiceExePath)
+            ?? Path.Combine(AppContext.BaseDirectory, "AssetSync.Service.exe");
     }
 
     [RelayCommand]
@@ -109,6 +124,7 @@ public partial class SettingsViewModel : ObservableObject
             await _config.SetAsync(ConfigKeys.WebhookUrl, WebhookUrl);
             await _config.SetAsync(ConfigKeys.WebhookType, WebhookType);
             await _config.SetAsync(ConfigKeys.LogRetentionDays, LogRetentionDays.ToString());
+            await _config.SetAsync(ConfigKeys.ServiceExePath, ServiceExePath);
             StatusMessage = "Settings saved.";
         }
         catch (Exception ex)
@@ -162,5 +178,117 @@ public partial class SettingsViewModel : ObservableObject
         {
             WebhookTestStatus = $"Failed: {ex.Message}";
         }
+    }
+
+    [RelayCommand]
+    private void RefreshServiceStatus()
+    {
+        try
+        {
+            using var sc = new ServiceController(ServiceName);
+            var status = sc.Status;
+            ServiceInstalled = true;
+            ServiceRunning = status == ServiceControllerStatus.Running;
+            ServiceStatus = status switch
+            {
+                ServiceControllerStatus.Running => "Running",
+                ServiceControllerStatus.Stopped => "Stopped",
+                ServiceControllerStatus.StartPending => "Starting...",
+                ServiceControllerStatus.StopPending => "Stopping...",
+                _ => status.ToString()
+            };
+            ServiceStatusColor = status == ServiceControllerStatus.Running ? "Green" : "Orange";
+        }
+        catch (InvalidOperationException)
+        {
+            ServiceInstalled = false;
+            ServiceRunning = false;
+            ServiceStatus = "Not Installed";
+            ServiceStatusColor = "Gray";
+        }
+        catch (Exception ex)
+        {
+            ServiceStatus = $"Error: {ex.Message}";
+            ServiceStatusColor = "Red";
+        }
+    }
+
+    [RelayCommand]
+    private void InstallService()
+    {
+        var exePath = string.IsNullOrWhiteSpace(ServiceExePath)
+            ? Path.Combine(AppContext.BaseDirectory, "AssetSync.Service.exe")
+            : ServiceExePath;
+
+        if (!File.Exists(exePath))
+        {
+            ServiceMessage = $"Executable not found: {exePath}";
+            return;
+        }
+
+        try
+        {
+            RunElevated("sc.exe", $"create {ServiceName} binPath= \"{exePath}\" DisplayName= \"AssetSync Sync Service\" start= auto description= \"Runs scheduled AssetSync syncs in the background.\"");
+            System.Threading.Thread.Sleep(1500);
+            RefreshServiceStatus();
+            ServiceMessage = ServiceInstalled ? "Service installed." : "Install may have failed — run as administrator if needed.";
+        }
+        catch (Exception ex) { ServiceMessage = $"Install failed: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private void UninstallService()
+    {
+        try
+        {
+            if (ServiceRunning)
+                RunElevated("sc.exe", $"stop {ServiceName}");
+            RunElevated("sc.exe", $"delete {ServiceName}");
+            System.Threading.Thread.Sleep(1500);
+            RefreshServiceStatus();
+            ServiceMessage = !ServiceInstalled ? "Service uninstalled." : "Uninstall may have failed — run as administrator if needed.";
+        }
+        catch (Exception ex) { ServiceMessage = $"Uninstall failed: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private void StartService()
+    {
+        try
+        {
+            using var sc = new ServiceController(ServiceName);
+            sc.Start();
+            sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
+            RefreshServiceStatus();
+            ServiceMessage = "Service started.";
+        }
+        catch (Exception ex) { ServiceMessage = $"Start failed: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private void StopService()
+    {
+        try
+        {
+            using var sc = new ServiceController(ServiceName);
+            sc.Stop();
+            sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
+            RefreshServiceStatus();
+            ServiceMessage = "Service stopped.";
+        }
+        catch (Exception ex) { ServiceMessage = $"Stop failed: {ex.Message}"; }
+    }
+
+    private static void RunElevated(string exe, string args)
+    {
+        var psi = new ProcessStartInfo(exe, args)
+        {
+            Verb = "runas",
+            UseShellExecute = true,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+        var p = Process.Start(psi);
+        p?.WaitForExit(10_000);
     }
 }

@@ -1,0 +1,17 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# Publish output (self-contained exes exceed GitHub's 100MB limit)
+publish/
+**/publish/
+
+# User-specific files
+*.user
+*.suo
+.vs/
+
+# Local database
+*.db
+*.db-shm
+*.db-wal

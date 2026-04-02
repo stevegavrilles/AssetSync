@@ -12,6 +12,7 @@ public static class ConfigKeys
     public const string SetupComplete = "setup_complete";
     public const string IntuneMdmWins = "sync_intune_mdm_wins";
     public const string IruMdmWins = "sync_iru_mdm_wins";
+    public const string ServiceExePath = "service_exe_path";
 }
 
 public static class CredentialKeys

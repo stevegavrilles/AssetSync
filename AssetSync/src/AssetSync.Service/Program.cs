@@ -19,6 +19,7 @@ public static class Program
     public static async Task Main(string[] args)
     {
         var builder = Host.CreateApplicationBuilder(args);
+        builder.Services.AddWindowsService(o => o.ServiceName = "AssetSync");
 
         var dbPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
