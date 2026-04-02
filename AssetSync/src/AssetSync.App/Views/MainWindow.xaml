@@ -1,7 +1,8 @@
 <Window x:Class="AssetSync.App.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Asset Sync" Height="600" Width="900"
+        Title="AssetSync" Height="600" Width="900"
+        Icon="/app.ico"
         WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.ColumnDefinitions>

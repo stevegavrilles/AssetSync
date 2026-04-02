@@ -1,0 +1,16 @@
+# Build outputs
+bin/
+obj/
+
+# Publish output (self-contained exe is too large for GitHub)
+publish/
+
+# User-specific files
+*.user
+*.suo
+.vs/
+
+# Local database
+*.db
+*.db-shm
+*.db-wal
