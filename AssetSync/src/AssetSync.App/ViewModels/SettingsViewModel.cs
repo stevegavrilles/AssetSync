@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.ServiceProcess;
 using AssetSync.Core;
 using AssetSync.Core.Interfaces;
@@ -54,9 +55,11 @@ public partial class SettingsViewModel : ObservableObject
 
     // Service management
     private const string ServiceName = "AssetSync";
+    private static readonly string ServiceInstallPath =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                     "AssetSync", "AssetSync.Service.exe");
     [ObservableProperty] private string _serviceStatus = "Unknown";
     [ObservableProperty] private string _serviceStatusColor = "Gray";
-    [ObservableProperty] private string _serviceExePath = "";
     [ObservableProperty] private string _serviceMessage = "";
     [ObservableProperty] private bool _serviceInstalled;
     [ObservableProperty] private bool _serviceRunning;
@@ -97,8 +100,6 @@ public partial class SettingsViewModel : ObservableObject
         WebhookType = await _config.GetAsync(ConfigKeys.WebhookType) ?? "Generic";
         var retention = await _config.GetAsync(ConfigKeys.LogRetentionDays);
         LogRetentionDays = int.TryParse(retention, out var d) ? d : 30;
-        ServiceExePath = await _config.GetAsync(ConfigKeys.ServiceExePath)
-            ?? Path.Combine(AppContext.BaseDirectory, "AssetSync.Service.exe");
     }
 
     [RelayCommand]
@@ -124,7 +125,6 @@ public partial class SettingsViewModel : ObservableObject
             await _config.SetAsync(ConfigKeys.WebhookUrl, WebhookUrl);
             await _config.SetAsync(ConfigKeys.WebhookType, WebhookType);
             await _config.SetAsync(ConfigKeys.LogRetentionDays, LogRetentionDays.ToString());
-            await _config.SetAsync(ConfigKeys.ServiceExePath, ServiceExePath);
             StatusMessage = "Settings saved.";
         }
         catch (Exception ex)
@@ -216,22 +216,28 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void InstallService()
     {
-        var exePath = string.IsNullOrWhiteSpace(ServiceExePath)
-            ? Path.Combine(AppContext.BaseDirectory, "AssetSync.Service.exe")
-            : ServiceExePath;
-
-        if (!File.Exists(exePath))
-        {
-            ServiceMessage = $"Executable not found: {exePath}";
-            return;
-        }
-
         try
         {
-            RunElevated("sc.exe", $"create {ServiceName} binPath= \"{exePath}\" DisplayName= \"AssetSync Sync Service\" start= auto description= \"Runs scheduled AssetSync syncs in the background.\"");
+            // Extract the embedded service exe to ProgramData\AssetSync\
+            var dir = Path.GetDirectoryName(ServiceInstallPath)!;
+            Directory.CreateDirectory(dir);
+
+            using var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("AssetSync.Service.exe");
+
+            if (stream == null)
+            {
+                ServiceMessage = "Service bundle not found in application. Please rebuild from source.";
+                return;
+            }
+
+            using (var fs = File.Create(ServiceInstallPath))
+                stream.CopyTo(fs);
+
+            RunElevated("sc.exe", $"create {ServiceName} binPath= \"{ServiceInstallPath}\" DisplayName= \"AssetSync Sync Service\" start= auto obj= LocalSystem");
             System.Threading.Thread.Sleep(1500);
             RefreshServiceStatus();
-            ServiceMessage = ServiceInstalled ? "Service installed." : "Install may have failed — run as administrator if needed.";
+            ServiceMessage = ServiceInstalled ? "Service installed successfully." : "Install may have failed — a UAC prompt may have been declined.";
         }
         catch (Exception ex) { ServiceMessage = $"Install failed: {ex.Message}"; }
     }

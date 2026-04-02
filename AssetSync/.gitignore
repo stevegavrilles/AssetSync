@@ -6,6 +6,9 @@
 publish/
 **/publish/
 
+# Embedded service bundle (auto-generated during build)
+**/service_bundle/
+
 # User-specific files
 *.user
 *.suo

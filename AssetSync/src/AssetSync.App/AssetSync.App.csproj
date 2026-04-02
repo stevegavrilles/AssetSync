@@ -16,7 +16,18 @@
 
   <ItemGroup>
     <Resource Include="app.ico" />
+    <!-- Service exe embedded so the app can extract and install it without a separate file -->
+    <EmbeddedResource Include="service_bundle\AssetSync.Service.exe"
+                      LogicalName="AssetSync.Service.exe"
+                      Condition="Exists('service_bundle\AssetSync.Service.exe')" />
   </ItemGroup>
+
+  <!-- Publish the service bundle the first time (or when missing). Subsequent builds skip this. -->
+  <Target Name="PublishServiceBundle" BeforeTargets="ResolveAssemblyReferences"
+          Condition="!Exists('$(MSBuildThisFileDirectory)service_bundle\AssetSync.Service.exe')">
+    <Message Text="=== Publishing AssetSync.Service bundle (first-time only) ===" Importance="high" />
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\AssetSync.Service\AssetSync.Service.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o &quot;$(MSBuildThisFileDirectory)service_bundle&quot;" />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\AssetSync.Core\AssetSync.Core.csproj" />

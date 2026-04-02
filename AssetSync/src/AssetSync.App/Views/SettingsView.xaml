@@ -99,7 +99,7 @@
                 <TabItem Header="Service">
                     <StackPanel Margin="8">
                         <TextBlock TextWrapping="Wrap" Foreground="#555" FontSize="12" Margin="0,0,0,12">
-                            <Run Text="The AssetSync background service runs scheduled syncs even when the application is closed. Install it as a Windows Service for always-on syncing."/>
+                            <Run Text="The AssetSync background service runs scheduled syncs even when this application is closed. Click Install to register it as a Windows Service — no separate files needed."/>
                         </TextBlock>
 
                         <!-- Status -->
@@ -111,14 +111,6 @@
                                     <Button Content="Refresh" Command="{Binding RefreshServiceStatusCommand}" Margin="12,0,0,0" Padding="8,2"/>
                                 </StackPanel>
                                 <TextBlock Text="{Binding ServiceMessage}" Foreground="#555" FontSize="12"/>
-                            </StackPanel>
-                        </GroupBox>
-
-                        <!-- Executable Path -->
-                        <GroupBox Header="Service Executable" Margin="0,0,0,12">
-                            <StackPanel Margin="8">
-                                <TextBlock Text="Path to AssetSync.Service.exe" Margin="0,0,0,4" FontSize="12" Foreground="#555"/>
-                                <TextBox Text="{Binding ServiceExePath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" FontFamily="Consolas" FontSize="12"/>
                             </StackPanel>
                         </GroupBox>
 
