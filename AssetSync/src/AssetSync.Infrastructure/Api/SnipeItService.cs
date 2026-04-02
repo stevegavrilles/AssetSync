@@ -113,8 +113,8 @@ public class SnipeItService : ISnipeItService
             : $"TEMP{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
         payload["asset_tag"] = assetTag;
 
-        var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-        var response = await SendWithRetryAsync(HttpMethod.Post, $"{_baseUrl}/api/v1/hardware", body, cancellationToken).ConfigureAwait(false);
+        var payloadJson = JsonSerializer.Serialize(payload);
+        var response = await SendWithRetryAsync(HttpMethod.Post, $"{_baseUrl}/api/v1/hardware", () => new StringContent(payloadJson, Encoding.UTF8, "application/json"), cancellationToken).ConfigureAwait(false);
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
         // Snipe-IT returns HTTP 200 even on validation errors — check the status field in the body
@@ -156,8 +156,8 @@ public class SnipeItService : ISnipeItService
         }
         if (customFields.Count > 0)
             payload["custom_fields"] = customFields;
-        var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-        var response = await SendWithRetryAsync(HttpMethod.Patch, $"{_baseUrl}/api/v1/hardware/{assetId}", body, cancellationToken).ConfigureAwait(false);
+        var payloadJson = JsonSerializer.Serialize(payload);
+        var response = await SendWithRetryAsync(HttpMethod.Patch, $"{_baseUrl}/api/v1/hardware/{assetId}", () => new StringContent(payloadJson, Encoding.UTF8, "application/json"), cancellationToken).ConfigureAwait(false);
         return response.IsSuccessStatusCode;
     }
 
@@ -228,12 +228,12 @@ public class SnipeItService : ISnipeItService
         return list;
     }
 
-    private async Task<HttpResponseMessage> SendWithRetryAsync(HttpMethod method, string url, HttpContent? body, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendWithRetryAsync(HttpMethod method, string url, Func<HttpContent?>? bodyFactory, CancellationToken cancellationToken)
     {
         for (int attempt = 0; attempt <= MaxRetries; attempt++)
         {
             var client = CreateClient();
-            var request = new HttpRequestMessage(method, url) { Content = body };
+            var request = new HttpRequestMessage(method, url) { Content = bodyFactory?.Invoke() };
             var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (response.StatusCode != HttpStatusCode.TooManyRequests || attempt == MaxRetries)

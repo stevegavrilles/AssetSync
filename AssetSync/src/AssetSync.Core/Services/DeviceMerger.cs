@@ -20,7 +20,7 @@ public class DeviceMerger
             if (!bySerial.ContainsKey(key))
                 bySerial[key] = Clone(d);
             else
-                MergeInto(bySerial[key], d, preferIntune: IsWindowsOrAndroid(d));
+                MergeInto(bySerial[key], d);
         }
 
         foreach (var d in iruDevices)
@@ -30,23 +30,10 @@ public class DeviceMerger
             if (!bySerial.ContainsKey(key))
                 bySerial[key] = Clone(d);
             else
-                MergeInto(bySerial[key], d, preferIntune: !IsApple(d));
+                MergeInto(bySerial[key], d);
         }
 
         return bySerial.Values.ToList();
-    }
-
-    private static bool IsApple(Device d)
-    {
-        var os = (d.OperatingSystem ?? "").ToLowerInvariant();
-        var type = (d.DeviceType ?? "").ToLowerInvariant();
-        return os.Contains("ios") || os.Contains("macos") || type.Contains("iphone") || type.Contains("ipad") || type.Contains("mac");
-    }
-
-    private static bool IsWindowsOrAndroid(Device d)
-    {
-        var os = (d.OperatingSystem ?? "").ToLowerInvariant();
-        return os.Contains("windows") || os.Contains("android");
     }
 
     private static Device Clone(Device d)
@@ -76,49 +63,28 @@ public class DeviceMerger
         };
     }
 
-    private static void MergeInto(Device target, Device source, bool preferIntune)
+    /// <summary>
+    /// Fills empty fields on target from source. Priority is determined by iteration order
+    /// (Intune devices added first, then Iru), so the first source's values are preserved.
+    /// </summary>
+    private static void MergeInto(Device target, Device source)
     {
-        if (preferIntune)
-        {
-            if (string.IsNullOrEmpty(target.DeviceName) && !string.IsNullOrEmpty(source.DeviceName)) target.DeviceName = source.DeviceName;
-            if (string.IsNullOrEmpty(target.Model) && !string.IsNullOrEmpty(source.Model)) target.Model = source.Model;
-            if (target.SnipeItModelId == null && source.SnipeItModelId != null) target.SnipeItModelId = source.SnipeItModelId;
-            if (string.IsNullOrEmpty(target.AssignedUserUpn) && !string.IsNullOrEmpty(source.AssignedUserUpn)) target.AssignedUserUpn = source.AssignedUserUpn;
-            if (target.SnipeItAssignedUserId == null && source.SnipeItAssignedUserId != null) target.SnipeItAssignedUserId = source.SnipeItAssignedUserId;
-            if (string.IsNullOrEmpty(target.OsVersion) && !string.IsNullOrEmpty(source.OsVersion)) target.OsVersion = source.OsVersion;
-            if (string.IsNullOrEmpty(target.WindowsFeatureUpdate) && !string.IsNullOrEmpty(source.WindowsFeatureUpdate)) target.WindowsFeatureUpdate = source.WindowsFeatureUpdate;
-            if (string.IsNullOrEmpty(target.DeviceType) && !string.IsNullOrEmpty(source.DeviceType)) target.DeviceType = source.DeviceType;
-            if (target.SnipeItCategoryId == null && source.SnipeItCategoryId != null) target.SnipeItCategoryId = source.SnipeItCategoryId;
-            if (string.IsNullOrEmpty(target.PlatformSource)) target.PlatformSource = source.PlatformSource;
-            if (target.SnipeItAssetId == null && source.SnipeItAssetId != null) target.SnipeItAssetId = source.SnipeItAssetId;
-            if (string.IsNullOrEmpty(target.SnipeItAssetTag) && !string.IsNullOrEmpty(source.SnipeItAssetTag)) target.SnipeItAssetTag = source.SnipeItAssetTag;
-            if (string.IsNullOrEmpty(target.AzureAdDeviceId) && !string.IsNullOrEmpty(source.AzureAdDeviceId)) target.AzureAdDeviceId = source.AzureAdDeviceId;
-            if (string.IsNullOrEmpty(target.IruDeviceId) && !string.IsNullOrEmpty(source.IruDeviceId)) target.IruDeviceId = source.IruDeviceId;
-            // Prefer whichever side has a valid PM-format asset tag
-            if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
-            if (string.IsNullOrEmpty(target.IntuneNotes) && !string.IsNullOrEmpty(source.IntuneNotes)) target.IntuneNotes = source.IntuneNotes;
-            if (string.IsNullOrEmpty(target.IntuneDeviceId) && !string.IsNullOrEmpty(source.IntuneDeviceId)) target.IntuneDeviceId = source.IntuneDeviceId;
-        }
-        else
-        {
-            if (string.IsNullOrEmpty(target.DeviceName) && !string.IsNullOrEmpty(source.DeviceName)) target.DeviceName = source.DeviceName;
-            if (string.IsNullOrEmpty(target.Model) && !string.IsNullOrEmpty(source.Model)) target.Model = source.Model;
-            if (target.SnipeItModelId == null && source.SnipeItModelId != null) target.SnipeItModelId = source.SnipeItModelId;
-            if (string.IsNullOrEmpty(target.AssignedUserUpn) && !string.IsNullOrEmpty(source.AssignedUserUpn)) target.AssignedUserUpn = source.AssignedUserUpn;
-            if (target.SnipeItAssignedUserId == null && source.SnipeItAssignedUserId != null) target.SnipeItAssignedUserId = source.SnipeItAssignedUserId;
-            if (string.IsNullOrEmpty(target.OsVersion) && !string.IsNullOrEmpty(source.OsVersion)) target.OsVersion = source.OsVersion;
-            if (string.IsNullOrEmpty(target.WindowsFeatureUpdate) && !string.IsNullOrEmpty(source.WindowsFeatureUpdate)) target.WindowsFeatureUpdate = source.WindowsFeatureUpdate;
-            if (string.IsNullOrEmpty(target.DeviceType) && !string.IsNullOrEmpty(source.DeviceType)) target.DeviceType = source.DeviceType;
-            if (target.SnipeItCategoryId == null && source.SnipeItCategoryId != null) target.SnipeItCategoryId = source.SnipeItCategoryId;
-            if (string.IsNullOrEmpty(target.PlatformSource)) target.PlatformSource = source.PlatformSource;
-            if (target.SnipeItAssetId == null && source.SnipeItAssetId != null) target.SnipeItAssetId = source.SnipeItAssetId;
-            if (string.IsNullOrEmpty(target.SnipeItAssetTag) && !string.IsNullOrEmpty(source.SnipeItAssetTag)) target.SnipeItAssetTag = source.SnipeItAssetTag;
-            if (string.IsNullOrEmpty(target.AzureAdDeviceId) && !string.IsNullOrEmpty(source.AzureAdDeviceId)) target.AzureAdDeviceId = source.AzureAdDeviceId;
-            if (string.IsNullOrEmpty(target.IruDeviceId) && !string.IsNullOrEmpty(source.IruDeviceId)) target.IruDeviceId = source.IruDeviceId;
-            // Prefer whichever side has a valid PM-format asset tag
-            if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
-            if (string.IsNullOrEmpty(target.IntuneNotes) && !string.IsNullOrEmpty(source.IntuneNotes)) target.IntuneNotes = source.IntuneNotes;
-            if (string.IsNullOrEmpty(target.IntuneDeviceId) && !string.IsNullOrEmpty(source.IntuneDeviceId)) target.IntuneDeviceId = source.IntuneDeviceId;
-        }
+        if (string.IsNullOrEmpty(target.DeviceName) && !string.IsNullOrEmpty(source.DeviceName)) target.DeviceName = source.DeviceName;
+        if (string.IsNullOrEmpty(target.Model) && !string.IsNullOrEmpty(source.Model)) target.Model = source.Model;
+        if (target.SnipeItModelId == null && source.SnipeItModelId != null) target.SnipeItModelId = source.SnipeItModelId;
+        if (string.IsNullOrEmpty(target.AssignedUserUpn) && !string.IsNullOrEmpty(source.AssignedUserUpn)) target.AssignedUserUpn = source.AssignedUserUpn;
+        if (target.SnipeItAssignedUserId == null && source.SnipeItAssignedUserId != null) target.SnipeItAssignedUserId = source.SnipeItAssignedUserId;
+        if (string.IsNullOrEmpty(target.OsVersion) && !string.IsNullOrEmpty(source.OsVersion)) target.OsVersion = source.OsVersion;
+        if (string.IsNullOrEmpty(target.WindowsFeatureUpdate) && !string.IsNullOrEmpty(source.WindowsFeatureUpdate)) target.WindowsFeatureUpdate = source.WindowsFeatureUpdate;
+        if (string.IsNullOrEmpty(target.DeviceType) && !string.IsNullOrEmpty(source.DeviceType)) target.DeviceType = source.DeviceType;
+        if (target.SnipeItCategoryId == null && source.SnipeItCategoryId != null) target.SnipeItCategoryId = source.SnipeItCategoryId;
+        if (string.IsNullOrEmpty(target.PlatformSource)) target.PlatformSource = source.PlatformSource;
+        if (target.SnipeItAssetId == null && source.SnipeItAssetId != null) target.SnipeItAssetId = source.SnipeItAssetId;
+        if (string.IsNullOrEmpty(target.SnipeItAssetTag) && !string.IsNullOrEmpty(source.SnipeItAssetTag)) target.SnipeItAssetTag = source.SnipeItAssetTag;
+        if (string.IsNullOrEmpty(target.AzureAdDeviceId) && !string.IsNullOrEmpty(source.AzureAdDeviceId)) target.AzureAdDeviceId = source.AzureAdDeviceId;
+        if (string.IsNullOrEmpty(target.IruDeviceId) && !string.IsNullOrEmpty(source.IruDeviceId)) target.IruDeviceId = source.IruDeviceId;
+        if (string.IsNullOrEmpty(target.MdmAssetTag) && !string.IsNullOrEmpty(source.MdmAssetTag)) target.MdmAssetTag = source.MdmAssetTag;
+        if (string.IsNullOrEmpty(target.IntuneNotes) && !string.IsNullOrEmpty(source.IntuneNotes)) target.IntuneNotes = source.IntuneNotes;
+        if (string.IsNullOrEmpty(target.IntuneDeviceId) && !string.IsNullOrEmpty(source.IntuneDeviceId)) target.IntuneDeviceId = source.IntuneDeviceId;
     }
 }

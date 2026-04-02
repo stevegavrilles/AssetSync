@@ -185,12 +185,6 @@ public class SyncEngine : ISyncEngine
                 // Build a mutable copy so we can inject the asset tag if needed
                 var updates = new Dictionary<string, object?>(resolvedUpdates);
 
-                // Diagnostic: always log what asset tags we see on both sides
-                await LogAsync(runId, LogLevel.Info, SourceSystem.Application, "asset_tag_diag",
-                    device.SerialNumber, device.DeviceName, true,
-                    $"MDM='{device.MdmAssetTag ?? "(none)"}' Snipe-IT='{snipeAsset.SnipeItAssetTag ?? "(none)"}'",
-                    cancellationToken).ConfigureAwait(false);
-
                 // If MDM has a valid PM-format asset tag and Snipe-IT's tag is missing or non-standard, push it in
                 if (IsStandardTag(device.MdmAssetTag) && !IsStandardTag(snipeAsset.SnipeItAssetTag))
                 {
@@ -255,21 +249,32 @@ public class SyncEngine : ISyncEngine
 
         if (writeBackIntune && !string.IsNullOrEmpty(device.IntuneDeviceId) && device.PlatformSource == "Intune")
         {
-            try
+            // Skip if Intune notes already contain the exact tag line
+            var alreadyInNotes = device.IntuneNotes != null &&
+                device.IntuneNotes.Contains($"Asset Tag: {assetTag}", StringComparison.OrdinalIgnoreCase);
+
+            if (!alreadyInNotes)
             {
-                await _intuneService.WriteBackAssetTagAsync(device.IntuneDeviceId, assetTag, device.IntuneNotes, cancellationToken).ConfigureAwait(false);
-                await LogAsync(runId, LogLevel.Info, SourceSystem.Intune, "write_back",
-                    device.SerialNumber, device.DeviceName, true, $"Asset tag '{assetTag}' written to Intune notes", cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                await LogAsync(runId, LogLevel.Warning, SourceSystem.Intune, "write_back",
-                    device.SerialNumber, device.DeviceName, false, ex.Message, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await _intuneService.WriteBackAssetTagAsync(device.IntuneDeviceId, assetTag, device.IntuneNotes, cancellationToken).ConfigureAwait(false);
+                    await LogAsync(runId, LogLevel.Info, SourceSystem.Intune, "write_back",
+                        device.SerialNumber, device.DeviceName, true, $"Asset tag '{assetTag}' written to Intune notes", cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await LogAsync(runId, LogLevel.Warning, SourceSystem.Intune, "write_back",
+                        device.SerialNumber, device.DeviceName, false, ex.Message, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
 
         if (writeBackIru && !string.IsNullOrEmpty(device.IruDeviceId) && device.PlatformSource == "Iru")
         {
+            // Skip if Iru already has the correct tag
+            if (string.Equals(device.MdmAssetTag, assetTag, StringComparison.OrdinalIgnoreCase))
+                return;
+
             var ok = await _iruService.WriteBackAssetTagAsync(device.IruDeviceId, assetTag, cancellationToken).ConfigureAwait(false);
             await LogAsync(runId, ok ? LogLevel.Info : LogLevel.Warning, SourceSystem.Iru, "write_back",
                 device.SerialNumber, device.DeviceName, ok, ok ? $"Asset tag '{assetTag}' written to Iru asset_tag field" : "Write-back to Iru failed", cancellationToken).ConfigureAwait(false);
