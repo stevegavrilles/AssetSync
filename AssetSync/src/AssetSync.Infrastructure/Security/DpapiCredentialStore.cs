@@ -16,7 +16,8 @@ public class DpapiCredentialStore : ICredentialStore
     public async Task SetAsync(string key, string value, CancellationToken cancellationToken = default)
     {
         var plainBytes = System.Text.Encoding.UTF8.GetBytes(value);
-        var encrypted = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
+        // LocalMachine scope allows both the interactive user and SYSTEM (service) to decrypt
+        var encrypted = ProtectedData.Protect(plainBytes, null, DataProtectionScope.LocalMachine);
 
         await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -36,8 +37,28 @@ public class DpapiCredentialStore : ICredentialStore
         cmd.Parameters.AddWithValue("$k", key);
         var obj = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         if (obj is not byte[] encrypted) return null;
-        var decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
-        return System.Text.Encoding.UTF8.GetString(decrypted);
+
+        // Try LocalMachine scope first; fall back to CurrentUser for credentials saved by older builds
+        try
+        {
+            var decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.LocalMachine);
+            return System.Text.Encoding.UTF8.GetString(decrypted);
+        }
+        catch (CryptographicException)
+        {
+            // Credential was stored with CurrentUser scope — decrypt and re-save with LocalMachine
+            try
+            {
+                var decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+                var value = System.Text.Encoding.UTF8.GetString(decrypted);
+                await SetAsync(key, value, cancellationToken).ConfigureAwait(false); // re-encrypt as LocalMachine
+                return value;
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 
     public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)

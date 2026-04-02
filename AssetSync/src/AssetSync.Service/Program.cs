@@ -22,7 +22,7 @@ public static class Program
         builder.Services.AddWindowsService(o => o.ServiceName = "AssetSync");
 
         var dbPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             "AssetSync", "assetsync.db");
         var dir = Path.GetDirectoryName(dbPath);
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))

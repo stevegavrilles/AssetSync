@@ -24,11 +24,18 @@ public partial class App : Application
         base.OnStartup(e);
 
         var dbPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "AssetSync", "assetsync.db");
+        var dir = Path.GetDirectoryName(dbPath)!;
+        if (!Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
+
+        // One-time migration: move database from old LocalAppData location if it exists there
+        var oldDbPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "AssetSync", "assetsync.db");
-        var dir = Path.GetDirectoryName(dbPath);
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
+        if (!File.Exists(dbPath) && File.Exists(oldDbPath))
+            File.Copy(oldDbPath, dbPath);
 
         var connectionString = $"Data Source={dbPath}";
         var initializer = new DatabaseInitializer(connectionString);
