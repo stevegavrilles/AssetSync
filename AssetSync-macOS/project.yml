@@ -1,0 +1,63 @@
+name: AssetSync
+options:
+  bundleIdPrefix: com.assetsync
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15.0"
+
+settings:
+  base:
+    ARCHS: arm64
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "5.9"
+
+packages:
+  AssetSyncCore:
+    path: AssetSyncCore
+  AssetSyncInfrastructure:
+    path: AssetSyncInfrastructure
+
+targets:
+  AssetSync:
+    type: application
+    platform: macOS
+    sources:
+      - AssetSync
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.assetsync.app
+        PRODUCT_NAME: AssetSync
+        INFOPLIST_FILE: AssetSync/Info.plist
+        CODE_SIGN_ENTITLEMENTS: AssetSync/AssetSync.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: true
+        # Menu bar app — runs as accessory (no dock icon) with window
+        INFOPLIST_KEY_LSUIElement: false
+    dependencies:
+      - package: AssetSyncCore
+      - package: AssetSyncInfrastructure
+    entitlements:
+      path: AssetSync/AssetSync.entitlements
+
+  AssetSyncTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: AssetSyncCore/Tests/AssetSyncCoreTests
+    dependencies:
+      - package: AssetSyncCore
+      - target: AssetSync
+
+schemes:
+  AssetSync:
+    build:
+      targets:
+        AssetSync: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - AssetSyncTests
+    archive:
+      config: Release
