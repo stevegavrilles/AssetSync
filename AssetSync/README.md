@@ -27,7 +27,7 @@ Windows desktop application that synchronizes device asset data between **Micros
 
 1. Open `AssetSync.sln` in Visual Studio (or `dotnet build` on Windows).
 2. Run **AssetSync.App** (WPF). On first run, the app creates the SQLite DB under `%LocalAppData%\AssetSync\assetsync.db` and seeds default Windows build mappings.
-3. Configure Snipe-IT, Intune, and Iru in **Settings** (or complete the first-run wizard when implemented).
+3. On first run a setup wizard walks you through connecting Snipe-IT, Intune, and Iru and running an initial dry run. You can also configure or change these later in **Settings**.
 4. Use **Dashboard** → **Sync Now** or **Dry Run** to run a sync.
 
 ## Build and test

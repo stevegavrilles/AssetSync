@@ -5,6 +5,9 @@
 # Publish output (self-contained exes exceed GitHub's 100MB limit)
 publish/
 **/publish/
+# Versioned publish dirs (publish_v2, publish_v3, ...)
+publish_*/
+**/publish_*/
 
 # Embedded service bundle (auto-generated during build)
 **/service_bundle/
