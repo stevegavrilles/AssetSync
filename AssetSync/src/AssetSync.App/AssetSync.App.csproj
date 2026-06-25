@@ -12,6 +12,9 @@
     <AssemblyTitle>AssetSync</AssemblyTitle>
     <Product>AssetSync</Product>
     <Description>Asset synchronization across Intune, Kandji, and Snipe-IT</Description>
+    <!-- Self-contained Service bundle is published here (under obj/, so it is git-ignored and
+         cleaned with the build) and embedded into the app for the one-file install experience. -->
+    <ServiceBundleDir>$(MSBuildThisFileDirectory)obj\service_bundle</ServiceBundleDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,26 +22,61 @@
   </ItemGroup>
 
   <!--
-    Publish the service bundle if missing, then register it as an EmbeddedResource.
-    ItemGroup inside a Target is evaluated at execution time (after the file exists),
-    unlike top-level ItemGroups which are evaluated at project load time.
+    Inputs that should trigger a rebuild of the Service bundle: the source of the Service and the
+    projects it depends on, plus their .csproj files. Package/native-lib versions (e.g. SQLitePCLRaw
+    / e_sqlite3.dll) are pinned in the .csproj files, so a version bump is captured here without
+    keying on project.assets.json — which the RID-specific publish restore churns every build.
+    bin/obj are excluded so build-generated .cs (AssemblyInfo, etc.) don't make this always-dirty.
   -->
-  <Target Name="EmbedServiceBundle" BeforeTargets="ResolveAssemblyReferences">
-    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\AssetSync.Service\AssetSync.Service.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o &quot;$(MSBuildThisFileDirectory)service_bundle&quot;"
-          Condition="!Exists('$(MSBuildThisFileDirectory)service_bundle\AssetSync.Service.exe')" />
+  <ItemGroup>
+    <ServiceBundleInput Include="..\AssetSync.Service\**\*.cs;..\AssetSync.Infrastructure\**\*.cs;..\AssetSync.Core\**\*.cs"
+                        Exclude="..\AssetSync.Service\obj\**;..\AssetSync.Service\bin\**;..\AssetSync.Infrastructure\obj\**;..\AssetSync.Infrastructure\bin\**;..\AssetSync.Core\obj\**;..\AssetSync.Core\bin\**" />
+    <ServiceBundleInput Include="..\AssetSync.Service\AssetSync.Service.csproj;..\AssetSync.Infrastructure\AssetSync.Infrastructure.csproj;..\AssetSync.Core\AssetSync.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Publish the self-contained Service bundle into obj/. Incremental: re-runs only when a
+    ServiceBundleInput (Service/Infrastructure/Core source or .csproj) is newer than the published
+    exe. The exe is the only Output sentinel — it is freshly stamped by each publish; e_sqlite3.dll
+    is NOT used as an output because NuGet preserves its (old) package timestamp, which would make
+    the up-to-date check always fail. Guarded to the real build of this project: skipped for the WPF
+    *_wpftmp markup-compile clone (whose MSBuildProjectName differs) and for design-time/IDE builds.
+  -->
+  <Target Name="PublishServiceBundle"
+          Condition="'$(MSBuildProjectName)' == 'AssetSync.App' and '$(DesignTimeBuild)' != 'true'"
+          Inputs="@(ServiceBundleInput)"
+          Outputs="$(ServiceBundleDir)\AssetSync.Service.exe">
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\AssetSync.Service\AssetSync.Service.csproj&quot; -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o &quot;$(ServiceBundleDir)&quot;" />
+  </Target>
+
+  <!--
+    Register the published bundle as embedded resources. Runs on every real build (no Inputs/Outputs)
+    so the resources are always embedded even when PublishServiceBundle was skipped as up-to-date —
+    incrementality on the publish must not skip the embed. The inner ItemGroup is evaluated at
+    execution time, after the files exist.
+  -->
+  <Target Name="EmbedServiceBundle"
+          BeforeTargets="ResolveAssemblyReferences"
+          DependsOnTargets="PublishServiceBundle"
+          Condition="'$(MSBuildProjectName)' == 'AssetSync.App' and '$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
       <!-- Embed the service exe and its native SQLite DLL — both extracted to ProgramData on install -->
-      <EmbeddedResource Include="$(MSBuildThisFileDirectory)service_bundle\AssetSync.Service.exe"
+      <EmbeddedResource Include="$(ServiceBundleDir)\AssetSync.Service.exe"
                         LogicalName="AssetSync.Service.exe" />
-      <EmbeddedResource Include="$(MSBuildThisFileDirectory)service_bundle\e_sqlite3.dll"
+      <EmbeddedResource Include="$(ServiceBundleDir)\e_sqlite3.dll"
                         LogicalName="e_sqlite3.dll"
-                        Condition="Exists('$(MSBuildThisFileDirectory)service_bundle\e_sqlite3.dll')" />
+                        Condition="Exists('$(ServiceBundleDir)\e_sqlite3.dll')" />
     </ItemGroup>
   </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\AssetSync.Core\AssetSync.Core.csproj" />
     <ProjectReference Include="..\AssetSync.Infrastructure\AssetSync.Infrastructure.csproj" />
+    <!-- Build the Service before this project (for ordering + freshness tracking) but do not
+         reference its output assembly — it is embedded via EmbedServiceBundle instead. -->
+    <ProjectReference Include="..\AssetSync.Service\AssetSync.Service.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false" />
   </ItemGroup>
 
   <ItemGroup>
