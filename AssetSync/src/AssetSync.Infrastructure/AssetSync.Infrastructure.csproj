@@ -14,9 +14,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <!-- 3.x bundle moves the native SQLite lib out of the vulnerable <= 2.1.11 range (GHSA-2m69-gcr7-jv3q; no 2.1.x fix exists) -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
     <PackageReference Include="Microsoft.Graph" Version="5.75.0" />
+    <!-- Pin patched Kiota abstractions; Graph 5.75.0 pulls a vulnerable 1.x (GHSA-7j59-v9qr-6fq9, fixed in 1.22.0) -->
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
     <PackageReference Include="Microsoft.Identity.Client" Version="4.66.1" />
     <PackageReference Include="Azure.Identity" Version="1.13.1" />
   </ItemGroup>

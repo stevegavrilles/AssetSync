@@ -19,7 +19,7 @@ Windows desktop application that synchronizes device asset data between **Micros
 
 ## Design principles
 
-- **Snipe-IT wins** — MDM data never overwrites existing Snipe-IT values.
+- **Snipe-IT wins for most fields** — MDM never overwrites existing Snipe-IT values, except **device name**, where MDM (Intune/Iru) is the source of truth and any difference is pushed to Snipe-IT. Asset tags remain owned by Snipe-IT.
 - **Serial number** is the match key (normalized for comparison).
 - **Write-back** (asset tag to Intune/Iru) is off by default and can be enabled per platform.
 
