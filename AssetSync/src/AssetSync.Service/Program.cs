@@ -32,6 +32,12 @@ public static class Program
         var initializer = new DatabaseInitializer(connectionString);
         initializer.Initialize();
 
+        // Restrict the data directory + DB ACL (drop inherited Users:Read) to protect the
+        // DPAPI-encrypted credentials at rest. SYSTEM + Administrators + the current identity retain
+        // access; DPAPI scope is unchanged so app + service can both still decrypt.
+        if (!string.IsNullOrEmpty(dir))
+            DbFileSecurity.Harden(dir, dbPath);
+
         var services = builder.Services;
 
         services.AddSingleton(_ => connectionString);

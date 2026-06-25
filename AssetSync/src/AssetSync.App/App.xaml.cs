@@ -41,6 +41,12 @@ public partial class App : Application
         var initializer = new DatabaseInitializer(connectionString);
         initializer.Initialize();
 
+        // Lock down the data directory + DB so non-admin Users can no longer read the
+        // DPAPI-encrypted credentials. SYSTEM (service) + Administrators + the interactive user
+        // retain access; the DPAPI scope is unchanged so the app and the SYSTEM service can both
+        // still decrypt the shared DB.
+        DbFileSecurity.Harden(dir, dbPath);
+
         var services = new ServiceCollection();
 
         // Connection string
