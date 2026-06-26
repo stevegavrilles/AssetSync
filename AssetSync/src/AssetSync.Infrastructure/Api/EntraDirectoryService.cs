@@ -97,14 +97,77 @@ public class EntraDirectoryService : IEntraDirectoryService
         }
     }
 
-    // --- Phase 2 (write direction) — NOT YET WIRED. Requires GroupMember.ReadWrite.All. ---
+    // --- Phase 2 (write direction). Add/Remove require GroupMember.ReadWrite.All; they are only
+    //     ever called for read_only=OFF mappings (Snipe-authoritative). ResolveUserObjectId needs
+    //     only User.ReadBasic.All. ---
 
-    public Task<string?> ResolveUserObjectIdAsync(string? upn, string? email, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("Entra user resolution is part of the Phase 2 write path and is not wired yet.");
+    public async Task<string?> ResolveUserObjectIdAsync(string? upn, string? email, CancellationToken cancellationToken = default)
+    {
+        var client = CreateClient();
 
-    public Task<bool> AddGroupMemberAsync(string groupId, string userObjectId, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("Writing Entra group membership is the Phase 2 write path and is not wired yet.");
+        // 1. Direct lookup by UPN: GET /users/{upn}
+        if (!string.IsNullOrWhiteSpace(upn))
+        {
+            try
+            {
+                var u = await client.Users[upn].GetAsync(c => c.QueryParameters.Select = new[] { "id" }, cancellationToken).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(u?.Id)) return u!.Id;
+            }
+            catch (ODataError ex) when (ex.ResponseStatusCode == 404)
+            {
+                // not found by UPN — fall through to email
+            }
+        }
 
-    public Task<bool> RemoveGroupMemberAsync(string groupId, string userObjectId, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("Removing Entra group membership is the Phase 2 write path and is not wired yet.");
+        // 2. Lookup by mail filter
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var escaped = email.Replace("'", "''");
+            var resp = await client.Users.GetAsync(c =>
+            {
+                c.QueryParameters.Filter = $"mail eq '{escaped}'";
+                c.QueryParameters.Select = new[] { "id" };
+                c.QueryParameters.Top = 1;
+            }, cancellationToken).ConfigureAwait(false);
+            var first = resp?.Value?.FirstOrDefault();
+            if (!string.IsNullOrEmpty(first?.Id)) return first!.Id;
+        }
+
+        return null;
+    }
+
+    public async Task<bool> AddGroupMemberAsync(string groupId, string userObjectId, CancellationToken cancellationToken = default)
+    {
+        var client = CreateClient();
+        var body = new ReferenceCreate { OdataId = $"https://graph.microsoft.com/v1.0/directoryObjects/{userObjectId}" };
+        try
+        {
+            await client.Groups[groupId].Members.Ref.PostAsync(body, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (ODataError ex) when (IsAlreadyExists(ex))
+        {
+            // Already a member — idempotent success.
+            return true;
+        }
+    }
+
+    public async Task<bool> RemoveGroupMemberAsync(string groupId, string userObjectId, CancellationToken cancellationToken = default)
+    {
+        var client = CreateClient();
+        try
+        {
+            await client.Groups[groupId].Members[userObjectId].Ref.DeleteAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (ODataError ex) when (ex.ResponseStatusCode == 404)
+        {
+            // Not a member (already removed) — idempotent success.
+            return true;
+        }
+    }
+
+    private static bool IsAlreadyExists(ODataError ex) =>
+        ex.ResponseStatusCode == 400 &&
+        (ex.Error?.Message?.Contains("already exist", StringComparison.OrdinalIgnoreCase) ?? false);
 }

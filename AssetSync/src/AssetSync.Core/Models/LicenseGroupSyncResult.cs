@@ -14,11 +14,16 @@ public class LicenseGroupMappingResult
     public int MappingId { get; set; }
     public string GroupName { get; set; } = "";
     public LicenseGroupRunStatus Status { get; set; }
+    // Read-only direction (Entra -> Snipe seats)
     public int Assigned { get; set; }
     public int CheckedIn { get; set; }
+    public int NoFreeSeat { get; set; }
+    // Write direction (Snipe -> Entra group membership)
+    public int Added { get; set; }
+    public int Removed { get; set; }
+    // Shared
     public int PendingNew { get; set; }
     public int NoMatch { get; set; }
-    public int NoFreeSeat { get; set; }
     public string? Message { get; set; }
 
     /// <summary>Lowercase status string persisted to last_run_status / shown in the UI.</summary>

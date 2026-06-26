@@ -36,6 +36,14 @@ public class LicenseGroupSyncEngineTests
             Snipe.Setup(s => s.CheckinSeatAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
             Log.Setup(l => l.AppendAsync(It.IsAny<LogEntry>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             Webhook.Setup(w => w.SendConnectivityFailureNotificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+            // Write-direction defaults: group exists + writable; add/remove succeed; resolve echoes "obj-<upn>".
+            Entra.Setup(e => e.GetGroupInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new EntraGroupInfo { Id = "g1", Exists = true, IsMembershipWritable = true });
+            Entra.Setup(e => e.AddGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            Entra.Setup(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            Entra.Setup(e => e.ResolveUserObjectIdAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string? upn, string? email, CancellationToken _) => string.IsNullOrEmpty(upn) ? null : "obj-" + upn);
         }
 
         public LicenseGroupSyncEngine Build() =>
@@ -206,18 +214,180 @@ public class LicenseGroupSyncEngineTests
         Assert.Equal(1, result.NoMatch);
     }
 
-    // Read-only OFF (write direction) is deferred to Phase 2 — must be skipped, never act.
+    // ===== Write direction (read_only = OFF, Snipe authoritative -> writes Entra membership) =====
+
+    private static GroupLicenseMapping WriteMapping() =>
+        new() { Id = 1, EntraGroupId = "g1", EntraGroupName = "G1", SnipeItLicenseId = 10, ReadOnly = false };
+    private static EntraUser EntraMember(string objectId) => new() { Id = objectId };
+
+    // Add: a licensed user not currently in the group is added.
     [Fact]
-    public async Task WriteDirectionMapping_IsSkipped_Phase2()
+    public async Task Write_AddsLicensedUserNotInGroup()
     {
         var h = new Harness();
-        var mapping = Mapping();
-        mapping.ReadOnly = false;
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x") });
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100) });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<EntraUser>());
 
-        var result = await h.Build().RunMappingAsync(mapping, dryRun: false);
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
 
-        Assert.Equal(LicenseGroupRunStatus.Skipped, result.Status);
-        h.Entra.Verify(e => e.GetGroupMembersAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        h.Snipe.Verify(s => s.CheckinSeatAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
+        Assert.Equal(1, result.Added);
+        h.Entra.Verify(e => e.AddGroupMemberAsync("g1", "obj-alice@x", It.IsAny<CancellationToken>()), Times.Once);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Remove first miss: an unlicensed member goes pending, is NOT removed.
+    [Fact]
+    public async Task Write_RemovalFirstMiss_RecordsPending_NoRemoval()
+    {
+        var h = new Harness();
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x") });
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100) });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { EntraMember("obj-alice@x"), EntraMember("obj-bob") }); // bob no longer licensed
+        h.Repo.Setup(r => r.GetPendingRemovalsAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<PendingRemoval>());
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
+
+        Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
+        Assert.Equal(1, result.PendingNew);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        h.Repo.Verify(r => r.UpsertPendingRemovalAsync(1, "obj-bob", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // Remove second consecutive miss: directory member is removed.
+    [Fact]
+    public async Task Write_RemovalSecondMiss_RemovesMember()
+    {
+        var h = new Harness();
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x") });
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100) });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { EntraMember("obj-alice@x"), EntraMember("obj-bob") });
+        h.Repo.Setup(r => r.GetPendingRemovalsAsync(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { new PendingRemoval { MappingId = 1, SubjectKey = "obj-bob", ConsecutiveMisses = 1 } });
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
+
+        Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
+        Assert.Equal(1, result.Removed);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync("g1", "obj-bob", It.IsAny<CancellationToken>()), Times.Once);
+        h.Repo.Verify(r => r.ClearPendingRemovalAsync(1, "obj-bob", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // Resolve no-match: a licensed Snipe user with no Entra identity is skipped, and triggers no removal.
+    [Fact]
+    public async Task Write_ResolveNoMatch_SkipsUser_NoRemoval()
+    {
+        var h = new Harness();
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x"), User(200, "ghost@x") });
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100), Seat(2, 200) });
+        h.Entra.Setup(e => e.ResolveUserObjectIdAsync("ghost@x", It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { EntraMember("obj-alice@x") });
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
+
+        Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
+        Assert.Equal(1, result.NoMatch);
+        h.Entra.Verify(e => e.AddGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Complete-read gate: a failed/partial Snipe seat read must NOT drive Entra removals.
+    [Fact]
+    public async Task Write_PartialSeatRead_DoesNotRemove_AndIsError()
+    {
+        var h = new Harness();
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("seat page failed"));
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
+
+        Assert.Equal(LicenseGroupRunStatus.Error, result.Status);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        h.Entra.Verify(e => e.AddGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Missing/deleted group is an error — never a write target.
+    [Fact]
+    public async Task Write_MissingGroup_IsError()
+    {
+        var h = new Harness();
+        h.Entra.Setup(e => e.GetGroupInfoAsync("g1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EntraGroupInfo { Id = "g1", Exists = false });
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
+
+        Assert.Equal(LicenseGroupRunStatus.Error, result.Status);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Dynamic (non-writable) group is refused.
+    [Fact]
+    public async Task Write_DynamicGroup_IsError()
+    {
+        var h = new Harness();
+        h.Entra.Setup(e => e.GetGroupInfoAsync("g1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EntraGroupInfo { Id = "g1", Exists = true, IsMembershipWritable = false });
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
+
+        Assert.Equal(LicenseGroupRunStatus.Error, result.Status);
+        h.Entra.Verify(e => e.AddGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Never act on the absence of data: empty desired set + non-empty group => refuse mass removal.
+    [Fact]
+    public async Task Write_EmptyDesired_NonEmptyGroup_IsError_NoRemoval()
+    {
+        var h = new Harness();
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<SnipeItLookup>());
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<LicenseSeat>()); // nobody licensed
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { EntraMember("obj-alice@x") });
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
+
+        Assert.Equal(LicenseGroupRunStatus.Error, result.Status);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Circuit breaker: more than 20 directory removals in one run halts the mapping, removes nothing.
+    [Fact]
+    public async Task Write_CircuitBreaker_Over20Removals_Halts()
+    {
+        var h = new Harness();
+        h.Config.Setup(c => c.GetAsync(ConfigKeys.LicenseRemovalGraceSyncs, It.IsAny<CancellationToken>())).ReturnsAsync("1");
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x") });
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100) });
+        var members = new List<EntraUser> { EntraMember("obj-alice@x") };
+        for (int i = 0; i < 21; i++) members.Add(EntraMember("obj-stale-" + i));
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(members);
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
+
+        Assert.Equal(LicenseGroupRunStatus.Halted, result.Status);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        h.Repo.Verify(r => r.UpsertPendingRemovalAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Dry run: no directory writes, no state mutation, but the would-add/would-remove deltas surface.
+    [Fact]
+    public async Task Write_DryRun_NoWrites_SurfacesDeltas()
+    {
+        var h = new Harness();
+        h.Config.Setup(c => c.GetAsync(ConfigKeys.LicenseRemovalGraceSyncs, It.IsAny<CancellationToken>())).ReturnsAsync("1");
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x") });
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100) });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { EntraMember("obj-bob") }); // alice missing -> add; bob stale -> remove
+
+        var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: true);
+
+        Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
+        Assert.Equal(1, result.Added);   // would add alice
+        Assert.Equal(1, result.Removed); // would remove bob (grace=1)
+        h.Entra.Verify(e => e.AddGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        h.Repo.Verify(r => r.UpsertPendingRemovalAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

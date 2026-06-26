@@ -67,15 +67,10 @@ public class LicenseGroupSyncEngine : ILicenseGroupSyncEngine
         var runId = Guid.NewGuid().ToString();
         var result = new LicenseGroupMappingResult { MappingId = mapping.Id, GroupName = mapping.EntraGroupName };
 
-        // Phase 1 handles only read-only (Entra-authoritative) mappings. Write direction is deferred.
+        // read_only OFF = Snipe authoritative -> the app WRITES Entra group membership (Phase 2).
+        // Requires GroupMember.ReadWrite.All; only ever exercised on this branch.
         if (!mapping.ReadOnly)
-        {
-            result.Status = LicenseGroupRunStatus.Skipped;
-            result.Message = "Read-only OFF (Snipe -> Entra write) is not implemented yet (Phase 2).";
-            await LogAsync(runId, LogLevel.Info, "license_skip", mapping.EntraGroupName, true, result.Message, cancellationToken).ConfigureAwait(false);
-            await PersistStatusAsync(mapping.Id, result, dryRun, cancellationToken).ConfigureAwait(false);
-            return result;
-        }
+            return await RunWriteMappingAsync(runId, mapping, result, dryRun, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -228,6 +223,175 @@ public class LicenseGroupSyncEngine : ILicenseGroupSyncEngine
         catch (Exception ex)
         {
             _logger.LogError(ex, "License-group sync failed for mapping {MappingId}", mapping.Id);
+            return await FailAsync(runId, mapping, result, ex.Message, dryRun, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Write direction (read_only OFF, Snipe authoritative): add Snipe-licensed users to the Entra
+    /// group and remove members who no longer hold a seat. Removing a directory member is higher
+    /// stakes than checking in a Snipe seat, so the same guardrails apply, with the AUTHORITATIVE
+    /// read being the Snipe seat list — a partial/failed seat read must never drive Entra removals.
+    /// </summary>
+    private async Task<LicenseGroupMappingResult> RunWriteMappingAsync(string runId, GroupLicenseMapping mapping, LicenseGroupMappingResult result, bool dryRun, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // 0. The group must exist and be membership-writable (not dynamic).
+            EntraGroupInfo info;
+            try
+            {
+                info = await _entra.GetGroupInfoAsync(mapping.EntraGroupId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                return await FailAsync(runId, mapping, result, $"Entra group read failed: {ex.Message}", dryRun, cancellationToken).ConfigureAwait(false);
+            }
+            if (!info.Exists)
+                return await FailAsync(runId, mapping, result, "Entra group not found / deleted — refusing to write membership.", dryRun, cancellationToken).ConfigureAwait(false);
+            if (!info.IsMembershipWritable)
+                return await FailAsync(runId, mapping, result, "Entra group membership is not writable (dynamic group) — refusing to write.", dryRun, cancellationToken).ConfigureAwait(false);
+
+            // 1. Authoritative read: Snipe seat list. Complete-read gate — a thrown/partial read must
+            //    NOT lead to Entra removals.
+            IReadOnlyList<LicenseSeat> seats;
+            try
+            {
+                seats = await _snipe.GetLicenseSeatsAsync(mapping.SnipeItLicenseId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                return await FailAsync(runId, mapping, result, $"Snipe-IT seat read failed (incomplete) — refusing to write Entra membership: {ex.Message}", dryRun, cancellationToken).ConfigureAwait(false);
+            }
+            var desiredSnipeUserIds = seats.Where(s => s.AssignedToUserId.HasValue).Select(s => s.AssignedToUserId!.Value).Distinct().ToList();
+
+            // 2. Current Entra membership (needed to diff adds/removes). Thrown read = error.
+            IReadOnlyList<EntraUser> currentMembers;
+            try
+            {
+                currentMembers = await _entra.GetGroupMembersAsync(mapping.EntraGroupId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                return await FailAsync(runId, mapping, result, $"Entra membership read failed — refusing to write: {ex.Message}", dryRun, cancellationToken).ConfigureAwait(false);
+            }
+            var currentObjectIds = new HashSet<string>(currentMembers.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+
+            // 3. Resolve each Snipe-licensed user to an Entra object id (by UPN, then email).
+            var users = await _snipe.GetUsersAsync(cancellationToken).ConfigureAwait(false);
+            var usersById = users.GroupBy(u => u.Id).ToDictionary(g => g.Key, g => g.First());
+            var desiredObjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var snipeUserId in desiredSnipeUserIds)
+            {
+                usersById.TryGetValue(snipeUserId, out var su);
+                string? objectId = null;
+                try
+                {
+                    objectId = await _entra.ResolveUserObjectIdAsync(su?.Username, su?.Email, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await LogAsync(runId, LogLevel.Warning, "license_skip", mapping.EntraGroupName, true,
+                        $"Entra resolve failed for Snipe user {snipeUserId}: {ex.Message}", cancellationToken).ConfigureAwait(false);
+                }
+                if (string.IsNullOrEmpty(objectId))
+                {
+                    result.NoMatch++;
+                    await LogAsync(runId, LogLevel.Warning, "license_skip", mapping.EntraGroupName, true,
+                        $"No Entra user for Snipe user {snipeUserId} ('{su?.Username ?? su?.Email}')", cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+                desiredObjectIds.Add(objectId);
+            }
+
+            // Never act on the absence of data: refuse to empty a non-empty group. An empty resolved
+            // desired set (no seats, or none resolved) must never mass-remove existing members.
+            if (desiredObjectIds.Count == 0 && currentObjectIds.Count > 0)
+                return await FailAsync(runId, mapping, result, "Resolved desired membership is empty but the group has members — refusing mass removal (no seats assigned, or none resolved to Entra users).", dryRun, cancellationToken).ConfigureAwait(false);
+
+            // 4. Add phase: desired users not currently in the group. (Add is non-destructive.)
+            foreach (var objectId in desiredObjectIds)
+            {
+                if (currentObjectIds.Contains(objectId)) continue;
+                if (!dryRun)
+                    await _entra.AddGroupMemberAsync(mapping.EntraGroupId, objectId, cancellationToken).ConfigureAwait(false);
+                result.Added++;
+                await LogAsync(runId, LogLevel.Info, "license_add", mapping.EntraGroupName, true,
+                    $"{(dryRun ? "[DRY RUN] would add" : "Added")} member {objectId}", cancellationToken).ConfigureAwait(false);
+            }
+
+            // 5. Remove phase — grace period + circuit breaker (directory removal is the destructive side).
+            var grace = await GetIntConfigAsync(ConfigKeys.LicenseRemovalGraceSyncs, DefaultGraceSyncs, cancellationToken).ConfigureAwait(false);
+            var breaker = await GetIntConfigAsync(ConfigKeys.LicenseRemovalCircuitBreaker, DefaultCircuitBreaker, cancellationToken).ConfigureAwait(false);
+
+            var pending = (await _repo.GetPendingRemovalsAsync(mapping.Id, cancellationToken).ConfigureAwait(false))
+                .ToDictionary(p => p.SubjectKey, StringComparer.Ordinal);
+
+            var candidates = currentMembers.Where(m => !desiredObjectIds.Contains(m.Id)).ToList();
+            var candidateKeys = new HashSet<string>(candidates.Select(m => m.Id), StringComparer.Ordinal);
+            var reappeared = pending.Keys.Where(k => !candidateKeys.Contains(k)).ToList();
+
+            var prospective = candidates
+                .Select(m =>
+                {
+                    var key = m.Id;
+                    var newCount = (pending.TryGetValue(key, out var p) ? p.ConsecutiveMisses : 0) + 1;
+                    return (Member: m, Key: key, NewCount: newCount);
+                })
+                .ToList();
+            var wouldRemove = prospective.Where(p => p.NewCount >= grace).ToList();
+
+            if (wouldRemove.Count > breaker)
+            {
+                result.Status = LicenseGroupRunStatus.Halted;
+                result.Message = $"Circuit breaker: {wouldRemove.Count} Entra group removals would exceed the per-mapping limit of {breaker}. Halted — no members removed; pending state left intact. Investigate, then Rerun.";
+                await LogAsync(runId, LogLevel.Error, "license_halt", mapping.EntraGroupName, false, result.Message, cancellationToken).ConfigureAwait(false);
+                await _webhook.SendConnectivityFailureNotificationAsync("License sync", $"Group '{mapping.EntraGroupName}': {result.Message}", cancellationToken).ConfigureAwait(false);
+                await PersistStatusAsync(mapping.Id, result, dryRun, cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+
+            if (!dryRun)
+            {
+                foreach (var key in reappeared)
+                    await _repo.ClearPendingRemovalAsync(mapping.Id, key, cancellationToken).ConfigureAwait(false);
+
+                foreach (var p in prospective)
+                {
+                    if (p.NewCount >= grace)
+                    {
+                        await _entra.RemoveGroupMemberAsync(mapping.EntraGroupId, p.Key, cancellationToken).ConfigureAwait(false);
+                        await _repo.ClearPendingRemovalAsync(mapping.Id, p.Key, cancellationToken).ConfigureAwait(false);
+                        result.Removed++;
+                        await LogAsync(runId, LogLevel.Info, "license_remove", mapping.EntraGroupName, true,
+                            $"Removed member {p.Key} — absent from license for {p.NewCount} consecutive syncs", cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await _repo.UpsertPendingRemovalAsync(mapping.Id, p.Key, cancellationToken).ConfigureAwait(false);
+                        result.PendingNew++;
+                        await LogAsync(runId, LogLevel.Info, "license_pending", mapping.EntraGroupName, true,
+                            $"Member {p.Key} pending removal — miss {p.NewCount}/{grace}", cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            else
+            {
+                result.Removed = wouldRemove.Count;
+                result.PendingNew = prospective.Count - wouldRemove.Count;
+                foreach (var p in prospective)
+                    await LogAsync(runId, LogLevel.Info, "license_remove", mapping.EntraGroupName, true,
+                        $"[DRY RUN] member {p.Key} miss {p.NewCount}/{grace}{(p.NewCount >= grace ? " — would remove" : " — would stay pending")}", cancellationToken).ConfigureAwait(false);
+            }
+
+            result.Status = LicenseGroupRunStatus.Ok;
+            result.Message = $"{result.Added} added, {result.Removed} removed, {result.PendingNew} pending, {result.NoMatch} unresolved.";
+            await PersistStatusAsync(mapping.Id, result, dryRun, cancellationToken).ConfigureAwait(false);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "License-group write sync failed for mapping {MappingId}", mapping.Id);
             return await FailAsync(runId, mapping, result, ex.Message, dryRun, cancellationToken).ConfigureAwait(false);
         }
     }
