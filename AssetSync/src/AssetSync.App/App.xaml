@@ -19,6 +19,9 @@
             <DataTemplate DataType="{x:Type vm:MappingsViewModel}">
                 <views:MappingsView/>
             </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:LicenseGroupsViewModel}">
+                <views:LicenseGroupsView/>
+            </DataTemplate>
             <DataTemplate DataType="{x:Type vm:LogsViewModel}">
                 <views:LogsView/>
             </DataTemplate>

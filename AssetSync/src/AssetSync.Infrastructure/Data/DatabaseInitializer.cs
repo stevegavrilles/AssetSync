@@ -84,6 +84,27 @@ public class DatabaseInitializer
                 encrypted_value BLOB NOT NULL
             );");
 
+        Execute(conn, @"
+            CREATE TABLE IF NOT EXISTS group_license_mappings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entra_group_id TEXT NOT NULL UNIQUE,
+                entra_group_name TEXT NOT NULL,
+                snipeit_license_id INTEGER NOT NULL,
+                read_only INTEGER NOT NULL DEFAULT 1,
+                last_run_status TEXT,
+                last_error TEXT
+            );");
+
+        Execute(conn, @"
+            CREATE TABLE IF NOT EXISTS license_group_pending_removals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mapping_id INTEGER NOT NULL,
+                subject_key TEXT NOT NULL,
+                consecutive_misses INTEGER NOT NULL DEFAULT 1,
+                first_missed_utc TEXT NOT NULL,
+                UNIQUE(mapping_id, subject_key)
+            );");
+
         SeedDefaultBuildMappings(conn);
     }
 

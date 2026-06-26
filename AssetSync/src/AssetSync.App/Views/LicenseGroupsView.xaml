@@ -1,0 +1,73 @@
+<UserControl x:Class="AssetSync.App.Views.LicenseGroupsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel Margin="4">
+        <TextBlock DockPanel.Dock="Top" Text="License Groups" FontSize="18" FontWeight="Bold" Margin="0,0,0,4"/>
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8"
+                   Text="Correlate an Entra group with a Snipe-IT license. Phase 1 is read-only: members of the Entra group are assigned seats on the license, and absentees are checked in after a grace period. Removals are bounded by a per-mapping circuit breaker."/>
+
+        <!-- Add panel -->
+        <Border DockPanel.Dock="Top" Background="#f7f7f7" Padding="8" Margin="0,0,0,8" BorderBrush="#ddd" BorderThickness="1">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <Button Content="Fetch Licenses" Command="{Binding FetchLicensesCommand}" MinWidth="110" Margin="0,0,8,0"/>
+                    <TextBlock Text="(load Snipe-IT licenses before adding a mapping)" VerticalAlignment="Center" Foreground="#777"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel Margin="0,0,12,0">
+                        <TextBlock Text="Entra group ID"/>
+                        <TextBox Text="{Binding NewGroupId, UpdateSourceTrigger=PropertyChanged}" Width="280"/>
+                    </StackPanel>
+                    <StackPanel Margin="0,0,12,0">
+                        <TextBlock Text="Snipe-IT license"/>
+                        <ComboBox ItemsSource="{Binding Licenses}" SelectedItem="{Binding SelectedLicense}"
+                                  DisplayMemberPath="Name" Width="220"/>
+                    </StackPanel>
+                    <CheckBox Content="Read only (Entra → Snipe)" IsChecked="{Binding NewReadOnly}"
+                              VerticalAlignment="Bottom" Margin="0,0,12,4"
+                              ToolTip="ON (default): Entra is authoritative; the app only writes Snipe-IT seats and never the directory. OFF: Snipe authoritative, provisions Entra membership — Phase 2, not yet implemented."/>
+                    <Button Content="Add Mapping" Command="{Binding AddMappingCommand}" VerticalAlignment="Bottom" MinWidth="100" Margin="0,0,0,2"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Actions -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="Run Sync" Command="{Binding RunAllCommand}" MinWidth="90" Margin="0,0,8,0"/>
+            <Button Content="Dry Run" Command="{Binding DryRunAllCommand}" MinWidth="90" Margin="0,0,8,0"/>
+            <Button Content="Refresh" Command="{Binding LoadCommand}" MinWidth="90"/>
+        </StackPanel>
+
+        <!-- Status -->
+        <Border DockPanel.Dock="Bottom" Background="#f0f0f0" Padding="6" Margin="0,8,0,0">
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"/>
+        </Border>
+
+        <DataGrid ItemsSource="{Binding Mappings}" AutoGenerateColumns="False" CanUserAddRows="False"
+                  IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Entra Group" Binding="{Binding GroupName}" Width="200"/>
+                <DataGridTextColumn Header="Direction" Binding="{Binding DirectionText}" Width="180"/>
+                <DataGridTextColumn Header="License" Binding="{Binding LicenseName}" Width="160"/>
+                <DataGridTextColumn Header="Last Status" Binding="{Binding Status}" Width="90"/>
+                <DataGridTextColumn Header="Detail" Binding="{Binding Error}" Width="*"/>
+                <DataGridTemplateColumn Header="" Width="160">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Rerun" Margin="2" Padding="6,1"
+                                        IsEnabled="{Binding CanRerun}"
+                                        ToolTip="Re-run only this mapping (enabled when halted or errored)."
+                                        Command="{Binding DataContext.RerunMappingCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}"/>
+                                <Button Content="Delete" Margin="2" Padding="6,1"
+                                        Command="{Binding DataContext.DeleteMappingCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

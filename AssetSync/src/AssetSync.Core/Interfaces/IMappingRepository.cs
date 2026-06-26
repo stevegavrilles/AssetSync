@@ -26,4 +26,15 @@ public interface IMappingRepository
     Task<bool> IsModelIgnoredAsync(string mdmModelString, CancellationToken cancellationToken = default);
     Task AddModelIgnoreAsync(string mdmModelString, CancellationToken cancellationToken = default);
     Task RemoveModelIgnoreAsync(string mdmModelString, CancellationToken cancellationToken = default);
+
+    // Group <-> license mappings (Entra group correlated to a Snipe-IT license)
+    Task<IReadOnlyList<GroupLicenseMapping>> GetGroupLicenseMappingsAsync(CancellationToken cancellationToken = default);
+    Task SaveGroupLicenseMappingAsync(GroupLicenseMapping mapping, CancellationToken cancellationToken = default);
+    Task DeleteGroupLicenseMappingAsync(int id, CancellationToken cancellationToken = default);
+    Task UpdateGroupLicenseRunStatusAsync(int id, string status, string? error, CancellationToken cancellationToken = default);
+
+    // Grace-period / soft-delete state for license-seat removals
+    Task<IReadOnlyList<PendingRemoval>> GetPendingRemovalsAsync(int mappingId, CancellationToken cancellationToken = default);
+    Task UpsertPendingRemovalAsync(int mappingId, string subjectKey, CancellationToken cancellationToken = default);
+    Task ClearPendingRemovalAsync(int mappingId, string subjectKey, CancellationToken cancellationToken = default);
 }

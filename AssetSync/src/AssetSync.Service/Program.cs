@@ -56,7 +56,8 @@ public static class Program
             var config = sp.GetRequiredService<IConfigRepository>();
             var creds = sp.GetRequiredService<ICredentialStore>();
             var url = config.GetAsync(ConfigKeys.SnipeItUrl).GetAwaiter().GetResult() ?? "";
-            return new SnipeItService(url, () => creds.GetAsync(CredentialKeys.SnipeItApiKey).GetAwaiter().GetResult() ?? "", sp.GetRequiredService<IHttpClientFactory>());
+            var seatTemplate = config.GetAsync(ConfigKeys.SnipeItSeatPathTemplate).GetAwaiter().GetResult();
+            return new SnipeItService(url, () => creds.GetAsync(CredentialKeys.SnipeItApiKey).GetAwaiter().GetResult() ?? "", sp.GetRequiredService<IHttpClientFactory>(), seatTemplate);
         });
 
         services.AddTransient<IIntuneService>(sp =>
@@ -66,6 +67,15 @@ public static class Program
             var tenantId = config.GetAsync(ConfigKeys.IntuneTenantId).GetAwaiter().GetResult() ?? "";
             var clientId = config.GetAsync(ConfigKeys.IntuneClientId).GetAwaiter().GetResult() ?? "";
             return new IntuneService(tenantId, clientId, () => creds.GetAsync(CredentialKeys.IntuneClientSecret).GetAwaiter().GetResult() ?? "");
+        });
+
+        services.AddTransient<IEntraDirectoryService>(sp =>
+        {
+            var config = sp.GetRequiredService<IConfigRepository>();
+            var creds = sp.GetRequiredService<ICredentialStore>();
+            var tenantId = config.GetAsync(ConfigKeys.IntuneTenantId).GetAwaiter().GetResult() ?? "";
+            var clientId = config.GetAsync(ConfigKeys.IntuneClientId).GetAwaiter().GetResult() ?? "";
+            return new EntraDirectoryService(tenantId, clientId, () => creds.GetAsync(CredentialKeys.IntuneClientSecret).GetAwaiter().GetResult() ?? "");
         });
 
         services.AddTransient<IIruService>(sp =>
@@ -124,6 +134,7 @@ public static class Program
         });
 
         services.AddTransient<ISyncEngine, SyncEngine>();
+        services.AddTransient<ILicenseGroupSyncEngine, LicenseGroupSyncEngine>();
         services.AddHostedService<SyncWorker>();
 
         await builder.Build().RunAsync().ConfigureAwait(false);

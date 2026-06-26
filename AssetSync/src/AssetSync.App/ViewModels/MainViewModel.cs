@@ -27,6 +27,9 @@ public partial class MainViewModel : ObservableObject
     private void NavigateMappings() => CurrentView = _services.GetRequiredService<MappingsViewModel>();
 
     [RelayCommand]
+    private void NavigateLicenseGroups() => CurrentView = _services.GetRequiredService<LicenseGroupsViewModel>();
+
+    [RelayCommand]
     private void NavigateLogs() => CurrentView = _services.GetRequiredService<LogsViewModel>();
 
     [RelayCommand]

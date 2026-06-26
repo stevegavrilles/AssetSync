@@ -75,7 +75,8 @@ public partial class App : Application
             var config = sp.GetRequiredService<IConfigRepository>();
             var creds = sp.GetRequiredService<ICredentialStore>();
             var url = config.GetAsync(ConfigKeys.SnipeItUrl).GetAwaiter().GetResult() ?? "";
-            return new SnipeItService(url, () => creds.GetAsync(CredentialKeys.SnipeItApiKey).GetAwaiter().GetResult() ?? "", sp.GetRequiredService<IHttpClientFactory>());
+            var seatTemplate = config.GetAsync(ConfigKeys.SnipeItSeatPathTemplate).GetAwaiter().GetResult();
+            return new SnipeItService(url, () => creds.GetAsync(CredentialKeys.SnipeItApiKey).GetAwaiter().GetResult() ?? "", sp.GetRequiredService<IHttpClientFactory>(), seatTemplate);
         });
 
         services.AddTransient<IIntuneService>(sp =>
@@ -85,6 +86,16 @@ public partial class App : Application
             var tenantId = config.GetAsync(ConfigKeys.IntuneTenantId).GetAwaiter().GetResult() ?? "";
             var clientId = config.GetAsync(ConfigKeys.IntuneClientId).GetAwaiter().GetResult() ?? "";
             return new IntuneService(tenantId, clientId, () => creds.GetAsync(CredentialKeys.IntuneClientSecret).GetAwaiter().GetResult() ?? "");
+        });
+
+        // Entra directory service reuses the Intune/Graph app registration (read scopes only in Phase 1).
+        services.AddTransient<IEntraDirectoryService>(sp =>
+        {
+            var config = sp.GetRequiredService<IConfigRepository>();
+            var creds = sp.GetRequiredService<ICredentialStore>();
+            var tenantId = config.GetAsync(ConfigKeys.IntuneTenantId).GetAwaiter().GetResult() ?? "";
+            var clientId = config.GetAsync(ConfigKeys.IntuneClientId).GetAwaiter().GetResult() ?? "";
+            return new EntraDirectoryService(tenantId, clientId, () => creds.GetAsync(CredentialKeys.IntuneClientSecret).GetAwaiter().GetResult() ?? "");
         });
 
         services.AddTransient<IIruService>(sp =>
@@ -144,13 +155,15 @@ public partial class App : Application
             return new WebhookService(url, type, sp.GetRequiredService<IHttpClientFactory>());
         });
 
-        // Sync engine
+        // Sync engines
         services.AddTransient<ISyncEngine, SyncEngine>();
+        services.AddTransient<ILicenseGroupSyncEngine, LicenseGroupSyncEngine>();
 
         // ViewModels
         services.AddTransient<DashboardViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<MappingsViewModel>();
+        services.AddTransient<LicenseGroupsViewModel>();
         services.AddTransient<LogsViewModel>();
         services.AddTransient<QueuesViewModel>();
         services.AddTransient<MainViewModel>();

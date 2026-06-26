@@ -10,15 +10,20 @@ namespace AssetSync.Infrastructure.Api;
 public class SnipeItService : ISnipeItService
 {
     private const int MaxRetries = 3;
+    // Seat PATCH path varies by Snipe-IT version (singular /seat/ vs plural /seats/); keep it overridable.
+    // {0} = licenseId, {1} = seatId. Validate against the deployed Snipe-IT before relying on it.
+    private const string DefaultSeatPathTemplate = "/api/v1/licenses/{0}/seats/{1}";
     private readonly string _baseUrl;
     private readonly Func<string> _getApiKey;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly string _seatPathTemplate;
 
-    public SnipeItService(string baseUrl, Func<string> getApiKey, IHttpClientFactory httpClientFactory)
+    public SnipeItService(string baseUrl, Func<string> getApiKey, IHttpClientFactory httpClientFactory, string? seatPathTemplate = null)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _getApiKey = getApiKey;
         _httpClientFactory = httpClientFactory;
+        _seatPathTemplate = string.IsNullOrWhiteSpace(seatPathTemplate) ? DefaultSeatPathTemplate : seatPathTemplate!;
     }
 
     public async Task<Device?> GetAssetBySerialAsync(string normalizedSerial, CancellationToken cancellationToken = default)
@@ -190,13 +195,88 @@ public class SnipeItService : ISnipeItService
                 var first = u.TryGetProperty("first_name", out var fn) ? fn.GetString() ?? "" : "";
                 var last = u.TryGetProperty("last_name", out var ln) ? ln.GetString() ?? "" : "";
                 var uname = u.TryGetProperty("username", out var un) ? un.GetString() ?? "" : "";
+                var email = u.TryGetProperty("email", out var em) ? em.GetString() : null;
                 var name = !string.IsNullOrEmpty(first) || !string.IsNullOrEmpty(last) ? $"{first} {last}".Trim() : uname;
-                list.Add(new SnipeItLookup { Id = id, Name = name });
+                list.Add(new SnipeItLookup { Id = id, Name = name, Username = uname, Email = email });
             }
             if (count < limit) break;
             offset += count;
         }
         return list;
+    }
+
+    public async Task<IReadOnlyList<SnipeItLookup>> GetLicensesAsync(CancellationToken cancellationToken = default)
+        => await FetchLookupsAsync("/api/v1/licenses", cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<LicenseSeat>> GetLicenseSeatsAsync(int licenseId, CancellationToken cancellationToken = default)
+    {
+        var list = new List<LicenseSeat>();
+        var offset = 0;
+        const int limit = 500;
+        while (true)
+        {
+            var url = $"{_baseUrl}/api/v1/licenses/{licenseId}/seats?limit={limit}&offset={offset}";
+            var response = await SendWithRetryAsync(HttpMethod.Get, url, null, cancellationToken).ConfigureAwait(false);
+            // Throw on a hard failure — a partial seat read must not be mistaken for "these seats are free".
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Snipe-IT seat read failed ({(int)response.StatusCode}) for license {licenseId}");
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("status", out var st) && st.GetString() == "error")
+                throw new InvalidOperationException($"Snipe-IT seat read error for license {licenseId}: {json}");
+
+            var rows = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("rows", out var r) ? r : root;
+            if (rows.ValueKind != JsonValueKind.Array) break;
+            int count = 0;
+            foreach (var s in rows.EnumerateArray())
+            {
+                if (s.ValueKind != JsonValueKind.Object) continue;
+                count++;
+                var id = s.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
+                list.Add(new LicenseSeat { Id = id, AssignedToUserId = ExtractAssignedUserId(s) });
+            }
+            if (count < limit) break;
+            offset += count;
+        }
+        return list;
+    }
+
+    // The assigned user appears under different keys across Snipe-IT versions; check the known ones.
+    private static int? ExtractAssignedUserId(JsonElement seat)
+    {
+        foreach (var prop in new[] { "assigned_user", "assigned_to", "user" })
+        {
+            if (seat.TryGetProperty(prop, out var el) && el.ValueKind == JsonValueKind.Object &&
+                el.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number)
+                return idEl.GetInt32();
+        }
+        return null;
+    }
+
+    public Task<bool> CheckoutSeatAsync(int licenseId, int seatId, int snipeItUserId, CancellationToken cancellationToken = default)
+        => PatchSeatAsync(licenseId, seatId, snipeItUserId, cancellationToken);
+
+    public Task<bool> CheckinSeatAsync(int licenseId, int seatId, CancellationToken cancellationToken = default)
+        => PatchSeatAsync(licenseId, seatId, null, cancellationToken);
+
+    private async Task<bool> PatchSeatAsync(int licenseId, int seatId, int? userId, CancellationToken cancellationToken)
+    {
+        var url = _baseUrl + string.Format(_seatPathTemplate, licenseId, seatId);
+        var payload = JsonSerializer.Serialize(new Dictionary<string, object?> { ["assigned_to"] = userId });
+        var response = await SendWithRetryAsync(HttpMethod.Patch, url, () => new StringContent(payload, Encoding.UTF8, "application/json"), cancellationToken).ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        // Snipe-IT can return HTTP 200 with {"status":"error",...} on validation failure.
+        try
+        {
+            var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("status", out var st) && st.GetString() == "error")
+                return false;
+        }
+        catch (JsonException) { /* non-JSON body — fall through to status code */ }
+        return response.IsSuccessStatusCode;
     }
 
     private async Task<IReadOnlyList<SnipeItLookup>> FetchLookupsAsync(string endpoint, CancellationToken cancellationToken)
