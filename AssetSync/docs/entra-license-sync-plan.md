@@ -371,12 +371,11 @@ naive switch to `CurrentUser` breaks the service.
   interactive user(s), removing inherited `Users: Read`. Apply a `DirectorySecurity` at DB-dir
   creation in both `App.OnStartup` and `Program.Main`. Cheap; gates enabling any write mapping.
   (Read-only operation already benefits, so do it up front regardless.)
-- **(6b) Per-install entropy with safe key storage — required durable fix.** Add per-install entropy
-  to `ProtectedData.Protect`/`Unprotect` (currently `null`). The hard part is *where the entropy
-  lives* — readable by both the interactive user and SYSTEM yet not co-located with the DB in a
-  Users-readable path. Evaluate a machine-keyed secret in an ACL-restricted location, or moving
-  secrets to a low-privilege **service account** whose profile keys the DPAPI scope. Land before
-  broad production rollout of write mappings.
+- **(6b) Per-install entropy with safe key storage — IMPLEMENTED.** Per-install random entropy is
+  mixed into `ProtectedData.Protect`/`Unprotect`, stored in a sibling, separately-ACL'd directory
+  (`%ProgramData%\AssetSyncKeys`, not co-located with the DB), DPAPI scope kept LocalMachine so the
+  app and SYSTEM service both decrypt; legacy no-entropy values are read via fallback and upgraded
+  in place. See `FileDpapiEntropyProvider` / `DpapiCredentialStore`.
 
 ## 7. Guardrails — never act on the absence of data
 

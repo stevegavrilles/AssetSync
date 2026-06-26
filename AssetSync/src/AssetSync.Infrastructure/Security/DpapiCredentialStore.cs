@@ -7,17 +7,20 @@ namespace AssetSync.Infrastructure.Security;
 public class DpapiCredentialStore : ICredentialStore
 {
     private readonly string _connectionString;
+    private readonly IDpapiEntropyProvider _entropyProvider;
 
-    public DpapiCredentialStore(string connectionString)
+    public DpapiCredentialStore(string connectionString, IDpapiEntropyProvider entropyProvider)
     {
         _connectionString = connectionString;
+        _entropyProvider = entropyProvider;
     }
 
     public async Task SetAsync(string key, string value, CancellationToken cancellationToken = default)
     {
         var plainBytes = System.Text.Encoding.UTF8.GetBytes(value);
-        // LocalMachine scope allows both the interactive user and SYSTEM (service) to decrypt
-        var encrypted = ProtectedData.Protect(plainBytes, null, DataProtectionScope.LocalMachine);
+        // LocalMachine scope allows both the interactive user and SYSTEM (service) to decrypt.
+        // Per-install entropy is mixed in so the DB blob alone is insufficient to decrypt.
+        var encrypted = ProtectedData.Protect(plainBytes, _entropyProvider.GetEntropy(), DataProtectionScope.LocalMachine);
 
         await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -38,26 +41,35 @@ public class DpapiCredentialStore : ICredentialStore
         var obj = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         if (obj is not byte[] encrypted) return null;
 
-        // Try LocalMachine scope first; fall back to CurrentUser for credentials saved by older builds
+        // 1. Current format: LocalMachine scope + per-install entropy.
+        try
+        {
+            var decrypted = ProtectedData.Unprotect(encrypted, _entropyProvider.GetEntropy(), DataProtectionScope.LocalMachine);
+            return System.Text.Encoding.UTF8.GetString(decrypted);
+        }
+        catch (CryptographicException) { /* not the current format — try legacy below */ }
+
+        // 2. Legacy: LocalMachine scope, NO entropy. Decrypt, then upgrade in place (re-protect with entropy).
         try
         {
             var decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.LocalMachine);
-            return System.Text.Encoding.UTF8.GetString(decrypted);
+            var value = System.Text.Encoding.UTF8.GetString(decrypted);
+            await SetAsync(key, value, cancellationToken).ConfigureAwait(false);
+            return value;
         }
-        catch (CryptographicException)
+        catch (CryptographicException) { /* try the oldest format below */ }
+
+        // 3. Oldest legacy: CurrentUser scope, no entropy. Decrypt, then upgrade in place.
+        try
         {
-            // Credential was stored with CurrentUser scope — decrypt and re-save with LocalMachine
-            try
-            {
-                var decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
-                var value = System.Text.Encoding.UTF8.GetString(decrypted);
-                await SetAsync(key, value, cancellationToken).ConfigureAwait(false); // re-encrypt as LocalMachine
-                return value;
-            }
-            catch
-            {
-                return null;
-            }
+            var decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+            var value = System.Text.Encoding.UTF8.GetString(decrypted);
+            await SetAsync(key, value, cancellationToken).ConfigureAwait(false);
+            return value;
+        }
+        catch
+        {
+            return null;
         }
     }
 

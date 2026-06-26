@@ -47,13 +47,20 @@ public partial class App : Application
         // still decrypt the shared DB.
         DbFileSecurity.Harden(dir, dbPath);
 
+        // Per-install DPAPI entropy lives in a sibling, separately-ACL'd directory (not co-located
+        // with the DB), so the DB blob alone cannot decrypt the credentials.
+        var keysDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "AssetSyncKeys");
+
         var services = new ServiceCollection();
 
         // Connection string
         services.AddSingleton(_ => connectionString);
 
         // Repositories & credential store
-        services.AddSingleton<ICredentialStore>(sp => new DpapiCredentialStore(sp.GetRequiredService<string>()));
+        services.AddSingleton<IDpapiEntropyProvider>(_ => new FileDpapiEntropyProvider(keysDir));
+        services.AddSingleton<ICredentialStore>(sp => new DpapiCredentialStore(sp.GetRequiredService<string>(), sp.GetRequiredService<IDpapiEntropyProvider>()));
         services.AddSingleton<ILogRepository>(sp => new SqliteLogRepository(sp.GetRequiredService<string>()));
         services.AddSingleton<IConfigRepository>(sp => new SqliteConfigRepository(sp.GetRequiredService<string>()));
         services.AddSingleton<IMappingRepository>(sp => new SqliteMappingRepository(sp.GetRequiredService<string>()));
