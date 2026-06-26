@@ -47,7 +47,16 @@
                   IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Entra Group" Binding="{Binding GroupName}" Width="200"/>
-                <DataGridTextColumn Header="Direction" Binding="{Binding DirectionText}" Width="180"/>
+                <DataGridTemplateColumn Header="Direction (click to change)" Width="220">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="{Binding DirectionText}" Margin="2" Padding="6,1" HorizontalContentAlignment="Left"
+                                    ToolTip="Click to switch direction. Read only = Entra → Snipe-IT (safe, read). Write = Snipe → Entra, which provisions/removes Entra group membership."
+                                    Command="{Binding DataContext.ToggleDirectionCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                    CommandParameter="{Binding}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="License" Binding="{Binding LicenseName}" Width="160"/>
                 <DataGridTextColumn Header="Last Status" Binding="{Binding Status}" Width="90"/>
                 <DataGridTextColumn Header="Detail" Binding="{Binding Error}" Width="*"/>

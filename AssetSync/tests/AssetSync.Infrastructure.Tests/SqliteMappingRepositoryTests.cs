@@ -111,5 +111,57 @@ public class SqliteMappingRepositoryTests : IDisposable
         Assert.DoesNotContain(await _repo.GetCategoryMappingsAsync(), m => m.MdmDeviceType == "Tablet");
     }
 
+    // Group <-> License Mappings (read_only direction)
+
+    [Fact]
+    public async Task GroupLicenseMapping_SavedNewMapping_DefaultsToReadOnly()
+    {
+        await _repo.SaveGroupLicenseMappingAsync(new GroupLicenseMapping
+        {
+            EntraGroupId = "g-1", EntraGroupName = "Acrobat Users", SnipeItLicenseId = 10
+        });
+
+        var saved = (await _repo.GetGroupLicenseMappingsAsync()).Single(m => m.EntraGroupId == "g-1");
+        Assert.True(saved.ReadOnly); // default ON
+        Assert.Equal("Acrobat Users", saved.EntraGroupName);
+        Assert.Equal(10, saved.SnipeItLicenseId);
+    }
+
+    [Fact]
+    public async Task GroupLicenseMapping_ToggleReadOnly_PersistsBothWays()
+    {
+        await _repo.SaveGroupLicenseMappingAsync(new GroupLicenseMapping
+        {
+            EntraGroupId = "g-2", EntraGroupName = "Photoshop Users", SnipeItLicenseId = 20
+        });
+        var saved = (await _repo.GetGroupLicenseMappingsAsync()).Single(m => m.EntraGroupId == "g-2");
+        Assert.True(saved.ReadOnly);
+
+        // Toggle to write mode (read_only = false) and persist.
+        saved.ReadOnly = false;
+        await _repo.SaveGroupLicenseMappingAsync(saved);
+
+        var afterWrite = (await _repo.GetGroupLicenseMappingsAsync()).Single(m => m.EntraGroupId == "g-2");
+        Assert.Equal(saved.Id, afterWrite.Id);
+        Assert.False(afterWrite.ReadOnly); // persisted to the read_only column
+
+        // Toggle back to read-only and persist.
+        afterWrite.ReadOnly = true;
+        await _repo.SaveGroupLicenseMappingAsync(afterWrite);
+        Assert.True((await _repo.GetGroupLicenseMappingsAsync()).Single(m => m.EntraGroupId == "g-2").ReadOnly);
+    }
+
+    [Fact]
+    public async Task GroupLicenseMapping_Delete()
+    {
+        await _repo.SaveGroupLicenseMappingAsync(new GroupLicenseMapping
+        {
+            EntraGroupId = "g-3", EntraGroupName = "ToRemove", SnipeItLicenseId = 30
+        });
+        var item = (await _repo.GetGroupLicenseMappingsAsync()).Single(m => m.EntraGroupId == "g-3");
+        await _repo.DeleteGroupLicenseMappingAsync(item.Id);
+        Assert.DoesNotContain(await _repo.GetGroupLicenseMappingsAsync(), m => m.EntraGroupId == "g-3");
+    }
+
     public void Dispose() => _db.Dispose();
 }

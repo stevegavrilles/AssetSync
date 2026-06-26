@@ -23,7 +23,15 @@ public partial class LicenseGroupRow : ObservableObject
     public string GroupId => Mapping.EntraGroupId;
     public string GroupName => Mapping.EntraGroupName;
     public bool ReadOnly => Mapping.ReadOnly;
-    public string DirectionText => Mapping.ReadOnly ? "Read only (Entra → Snipe)" : "Write (Snipe → Entra) — Phase 2";
+    public string DirectionText => Mapping.ReadOnly ? "Read only (Entra → Snipe)" : "Write (Snipe → Entra) ⚠";
+
+    /// <summary>Updates the mapping's direction and notifies the bound display.</summary>
+    public void SetReadOnly(bool value)
+    {
+        Mapping.ReadOnly = value;
+        OnPropertyChanged(nameof(ReadOnly));
+        OnPropertyChanged(nameof(DirectionText));
+    }
 
     [ObservableProperty] private string _licenseName;
     [ObservableProperty] private string _status;

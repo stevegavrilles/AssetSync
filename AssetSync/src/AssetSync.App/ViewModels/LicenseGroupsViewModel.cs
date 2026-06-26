@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using AssetSync.Core.Interfaces;
 using AssetSync.Core.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -38,7 +39,26 @@ public partial class LicenseGroupsViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadAsync()
     {
+        // Load licenses first so per-line names and the dropdown resolve to the real software name
+        // instead of an id-based label.
+        await EnsureLicensesLoadedAsync();
         await LoadMappingsAsync();
+    }
+
+    private async Task EnsureLicensesLoadedAsync()
+    {
+        if (Licenses.Count > 0) return;
+        try
+        {
+            var licenses = await _snipe.GetLicensesAsync();
+            Licenses.Clear();
+            foreach (var l in licenses) Licenses.Add(l);
+        }
+        catch
+        {
+            // Snipe-IT not reachable/configured yet — names fall back to an id label;
+            // the "Fetch Licenses" button retries.
+        }
     }
 
     private async Task LoadMappingsAsync()
@@ -49,6 +69,45 @@ public partial class LicenseGroupsViewModel : ObservableObject
         {
             var licenseName = Licenses.FirstOrDefault(l => l.Id == m.SnipeItLicenseId)?.Name ?? $"License #{m.SnipeItLicenseId}";
             Mappings.Add(new LicenseGroupRow(m, licenseName));
+        }
+    }
+
+    /// <summary>Toggles a mapping's direction (read-only Entra→Snipe vs. write Snipe→Entra) and
+    /// persists it to the read_only column. Switching to write mode is gated behind a confirmation
+    /// because it provisions/deprovisions Entra directory membership.</summary>
+    [RelayCommand]
+    private async Task ToggleDirectionAsync(LicenseGroupRow? row)
+    {
+        if (row == null) return;
+        var switchingToWrite = row.ReadOnly; // currently read-only -> turning OFF -> write mode
+
+        if (switchingToWrite)
+        {
+            var answer = MessageBox.Show(
+                $"Switch \"{row.GroupName}\" to WRITE mode (Snipe-IT → Entra)?\n\n" +
+                "In write mode this app PROVISIONS and DEPROVISIONS Entra group membership: users " +
+                "holding the Snipe-IT license seat are ADDED to the group, and members who no longer " +
+                "hold a seat are REMOVED from the group (after the grace period).\n\n" +
+                "This writes to your directory and requires the GroupMember.ReadWrite.All Graph permission.",
+                "Enable write / provisioning direction?",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (answer != MessageBoxResult.Yes) return;
+        }
+
+        var newReadOnly = !row.ReadOnly;
+        try
+        {
+            row.Mapping.ReadOnly = newReadOnly;
+            await _repo.SaveGroupLicenseMappingAsync(row.Mapping);
+            row.SetReadOnly(newReadOnly);
+            StatusMessage = newReadOnly
+                ? $"\"{row.GroupName}\" set to read-only (Entra → Snipe-IT)."
+                : $"\"{row.GroupName}\" set to WRITE mode (Snipe-IT → Entra). The next sync will provision/deprovision its group membership.";
+        }
+        catch (Exception ex)
+        {
+            row.Mapping.ReadOnly = !newReadOnly; // revert in-memory on failure
+            StatusMessage = $"Failed to change direction: {ex.Message}";
         }
     }
 
