@@ -239,6 +239,11 @@ CREATE TABLE IF NOT EXISTS license_group_pending_removals (
 );
 ```
 
+> **Superseded by [§11 Multi-group per license](#11-multi-group-per-license-one-license--many-groups).**
+> Phase 1/2 (one group per license) key this state per `mapping_id`. Once a license can own several
+> read groups, grace must be keyed per **(`snipeit_license_id`, `subject_key`)** so a user absent
+> from one read group but present in another is not counted as a miss. See §11 Phase 1.
+
 ### Repository methods
 
 **Bespoke methods (not the 2-column generic helper).** The generic `GetAllMappingsAsync`/
@@ -306,6 +311,13 @@ branches on `read_only`. Can run on the existing cadence or as a separate schedu
 
 Every per-mapping run records a result (`ok` / `error` / `halted` + reason) via
 `UpdateMappingRunStatusAsync`, which drives the per-line status and the Rerun affordance.
+
+> **Per-mapping vs. per-license.** §5a/§5b below describe the **one-group-per-license** model
+> shipped in Phase 1/2, where each mapping reconciles independently. When a license owns multiple
+> groups, the read side must reconcile **per license** (union of its read groups), not per group —
+> otherwise one read group's run would revoke a seat held by a user who is still in a sibling read
+> group. See [§11 Multi-group per license](#11-multi-group-per-license-one-license--many-groups) for
+> the restructured per-license reconcile; §5a/§5b remain accurate per-group building blocks.
 
 ### 5a. Read only ON (default) — Entra authoritative (writes Snipe only)
 
@@ -484,6 +496,102 @@ The decided guardrail set:
 - `src/AssetSync.Infrastructure/Data/DatabaseInitializer.cs` — `group_license_mappings` + `license_group_pending_removals` DDL
 - `src/AssetSync.Core/ConfigKeys.cs` — `LicenseUserMatchField`, `LicenseRemovalGraceSyncs`, `LicenseRemovalCircuitBreaker`, membership-scope, cadence keys
 - `src/AssetSync.App/App.xaml.cs` + `src/AssetSync.Service/Program.cs` — DI for `IEntraDirectoryService`; **DB-dir ACL hardening (6a)**
+
+## 11. Multi-group per license (one license → many groups)
+
+**Status:** Design (extends the shipped Phase 1/2). Some apps use several Entra groups for one
+license to designate different SCIM provisioning settings, so a single Snipe-IT license must map to
+multiple groups.
+
+### Model (decided)
+
+- **One group → exactly one license** (keep `entra_group_id UNIQUE`); **one license → many groups**
+  (already allowed — `snipeit_license_id` is unconstrained). `read_only` stays **per group**, so an
+  app's groups can mix directions.
+- **At most one write (read_only = OFF) provisioning group per license.** A license's other groups
+  must be read-only. Rationale: the groups encode *different* SCIM settings and Snipe only knows
+  "user has this license" (not which tier), so adding a licensed user to *every* group
+  (add-to-all) would grant every tier at once. The single write group is the default provisioning
+  target; the rest are read-only and merely reflect "user is licensed" back into Snipe.
+- **No-overlap assumption (documented).** We assume a user is not simultaneously in a read group and
+  the write group of the same license. Under that assumption the read→Snipe-seat→write-group chain
+  (a user in a read group gets the seat, which makes them a desired member of the write group) does
+  not occur in practice, so we keep the simple write behavior (write desired set = Snipe seat
+  holders; **no exclusion logic**). If groups *did* overlap, a read-group member could be
+  provisioned into the write group — out of scope by assumption; revisit if that assumption breaks.
+
+### Read vs. write semantics
+
+- **Read (Entra → Snipe), per license:** desired seat-holders = **union** of matched members across
+  **all** the license's read-only groups. Assign a seat to any unioned user who lacks one. A
+  seat-holder becomes a removal candidate **only when absent from ALL** of the license's read
+  groups; then the normal 2-sync grace + 20-user breaker apply **at the license level**.
+- **Write (Snipe → Entra):** unchanged from §5b, driven by the **single** write group per license.
+
+### Phase 1 — Schema / state
+
+- Add a **partial unique index** enforcing the one-write-group rule:
+  `CREATE UNIQUE INDEX IF NOT EXISTS ix_glm_one_write_group_per_license ON group_license_mappings(snipeit_license_id) WHERE read_only = 0;`
+  (SQLite supports partial indexes.)
+- **Re-key `license_group_pending_removals`** for union grace: from `(mapping_id, subject_key)` to
+  **(`snipeit_license_id`, `subject_key`)** (add a `snipeit_license_id` column; `UNIQUE(snipeit_license_id, subject_key)`).
+  The read reconcile counts a miss once per (license, user) instead of once per (group, user), so a
+  user present in any sibling read group is never a candidate.
+- Repo: `GetPendingRemovalsAsync` / `Upsert` / `Clear` change their key from mapping id to license id
+  (or gain a license-keyed overload); add a write-group pre-check helper (see Phase 3).
+- **Migration:** `license_group_pending_removals` rows are transient runtime state (grace counters),
+  so a **clean re-create** (drop + recreate with the new key) is low-risk — no user-visible data is
+  lost beyond in-flight grace counters, which simply restart at zero on the next sync.
+- **Tests:** index rejects a second `read_only=0` row for the same license; grace state is keyed per
+  (license, subject) and survives a re-create migration; pending-removal upsert/clear by license id.
+
+### Phase 2 — Engine restructure (per-license reconcile)
+
+- `RunAsync` **groups mappings by `snipeit_license_id`** and runs a per-license reconcile instead of
+  a per-mapping one.
+- **Read side:** read **every** read-only group of the license; build the **union** of matched
+  desired users; assign-from-any; remove a seat only when its user is absent from **all** read
+  groups, behind license-level grace + breaker.
+- **Write side:** reconcile the license's single write group exactly as §5b.
+- **Guardrails carry over at license level**, with one tightening: the **complete-read gate requires
+  EVERY read group of the license to enumerate cleanly** before any removal — a failed/partial read
+  of *any* one of them blocks removals for the whole license that run (adds/assigns still safe).
+  Never-act-on-empty applies to the *union* (empty union with existing seats → error/hold); the
+  20-user breaker counts total would-remove across the license.
+- **Tests:** union assign (user in group A or B gets the seat); **no revoke when present in a sibling
+  group** (the core multi-group bug); revoke only after absent from all + 2-sync grace; partial read
+  of one of several groups → no removals for that license; union empty + seats present → error;
+  breaker counts across the license; write side still targets only the single write group.
+
+### Phase 3 — Write-group constraint enforcement
+
+- DB partial unique index (Phase 1) is the backstop.
+- **Repo pre-check** on save/toggle: reject setting a group to `read_only = 0` when the license
+  already has a different write group, surfacing a friendly error: *"License X already has a
+  write/provisioning group: Y."*
+- **UI toggle guard:** the per-group direction toggle blocks switching a second group to write with
+  the same message (before hitting the DB error).
+- **Tests:** repo pre-check throws the friendly error on a second write group; toggling the existing
+  write group off then a different one on succeeds.
+
+### Phase 4 — UI (license-grouped layout)
+
+- Regroup the License Groups screen from a flat per-mapping grid into a **license-grouped** layout:
+  a **software-name header** per license with its mapped groups listed beneath.
+- **Add-group-per-license** affordance on each license header (group-id entry + existing
+  missing/dynamic validation), defaulting to **read-only ON**.
+- **Per-group read-only toggle** stays (with the Phase 3 single-write-group guard + the existing
+  write-mode confirmation).
+- **Status:** a **license-level roll-up** plus per-group error/halted lines; **Rerun** on any group
+  re-runs that **license's whole reconcile** (not just the one group).
+- **Tests:** mostly manual/UI; cover the VM grouping (mappings grouped by license id) and that the
+  toggle guard blocks a second write group.
+
+### Rollout order
+
+Phase 1 (schema/state + re-key migration) → Phase 2 (engine per-license reconcile) → Phase 3
+(write-group enforcement) → Phase 4 (UI). Each phase keeps the build + full suite green; the feature
+is backward compatible (a license with a single group behaves exactly as today).
 
 ## References
 
