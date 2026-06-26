@@ -145,6 +145,13 @@ Scope is tiered to the lowest-privilege set a deployment actually needs:
 The `GroupMember.ReadWrite.All` scope **must not be granted until the security prerequisite (§6) is
 in place** — see sequencing in [§8](#8-phased-rollout--validation).
 
+**Admin setup (no new app registration).** This feature reuses the **existing Intune app
+registration and client-secret credential** (same tenant/client id + secret). The admin adds the
+scopes above as **Application permissions** on that app registration and clicks **Grant admin
+consent**. Until granted + consented, the feature's Graph calls fail at runtime and the affected
+mapping shows an **error / halted** state (the rest of the app is unaffected). See also the README
+"Graph API permissions" section.
+
 ## 2. Snipe-IT additions (`ISnipeItService` / `SnipeItService`)
 
 Both directions touch Snipe-IT: read-only mappings **write** seats (assign/checkin) to mirror Entra;

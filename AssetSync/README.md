@@ -43,6 +43,15 @@ dotnet test
 
 Stored encrypted with Windows DPAPI in the local SQLite database. No credentials are written to logs.
 
+## Graph API permissions (License Groups feature)
+
+The License Groups feature **reuses the existing Intune app registration and client-secret credential** — there is no new app registration to create. An admin must add the following as **Application permissions** on that same app registration and click **Grant admin consent**:
+
+- **Read path** (read-only mappings, Entra → Snipe-IT): `GroupMember.Read.All` + `User.ReadBasic.All`
+- **Write / provisioning path** (read-only-OFF mappings, Snipe-IT → Entra): `GroupMember.ReadWrite.All`
+
+Until these are granted and consented, the feature's Graph calls fail at runtime and the affected mapping shows an **error / halted** state (the rest of the app is unaffected).
+
 ## License
 
 Internal use per your organization’s policy.
