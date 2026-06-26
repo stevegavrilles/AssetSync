@@ -1,6 +1,14 @@
 <UserControl x:Class="AssetSync.App.Views.LicenseGroupsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase">
+    <UserControl.Resources>
+        <CollectionViewSource x:Key="GroupedMappings" Source="{Binding Mappings}">
+            <CollectionViewSource.GroupDescriptions>
+                <PropertyGroupDescription PropertyName="LicenseName"/>
+            </CollectionViewSource.GroupDescriptions>
+        </CollectionViewSource>
+    </UserControl.Resources>
     <DockPanel Margin="4">
         <TextBlock DockPanel.Dock="Top" Text="License Groups" FontSize="18" FontWeight="Bold" Margin="0,0,0,4"/>
         <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8"
@@ -43,21 +51,35 @@
             <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"/>
         </Border>
 
-        <DataGrid ItemsSource="{Binding Mappings}" AutoGenerateColumns="False" CanUserAddRows="False"
+        <DataGrid ItemsSource="{Binding Source={StaticResource GroupedMappings}}" AutoGenerateColumns="False" CanUserAddRows="False"
                   IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+            <DataGrid.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <Border Background="#eef2ff" Padding="6,3" Margin="0,6,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="License: " FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding ItemCount, StringFormat=' — {0} group(s)'}" Foreground="#666"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </DataGrid.GroupStyle>
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Entra Group" Binding="{Binding GroupName}" Width="200"/>
+                <DataGridTextColumn Header="Entra Group" Binding="{Binding GroupName}" Width="220"/>
                 <DataGridTemplateColumn Header="Direction (click to change)" Width="220">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Button Content="{Binding DirectionText}" Margin="2" Padding="6,1" HorizontalContentAlignment="Left"
-                                    ToolTip="Click to switch direction. Read only = Entra → Snipe-IT (safe, read). Write = Snipe → Entra, which provisions/removes Entra group membership."
+                                    ToolTip="Click to switch direction. Read only = Entra → Snipe-IT (safe, read). Write = Snipe → Entra, which provisions/removes Entra group membership. Only one write group per license."
                                     Command="{Binding DataContext.ToggleDirectionCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                     CommandParameter="{Binding}"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="License" Binding="{Binding LicenseName}" Width="160"/>
                 <DataGridTextColumn Header="Last Status" Binding="{Binding Status}" Width="90"/>
                 <DataGridTextColumn Header="Detail" Binding="{Binding Error}" Width="*"/>
                 <DataGridTemplateColumn Header="" Width="160">
@@ -66,7 +88,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <Button Content="Rerun" Margin="2" Padding="6,1"
                                         IsEnabled="{Binding CanRerun}"
-                                        ToolTip="Re-run only this mapping (enabled when halted or errored)."
+                                        ToolTip="Re-run this license's whole reconcile (read union + write group). Enabled when halted or errored."
                                         Command="{Binding DataContext.RerunMappingCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                         CommandParameter="{Binding}"/>
                                 <Button Content="Delete" Margin="2" Padding="6,1"

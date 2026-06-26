@@ -7,9 +7,15 @@ namespace AssetSync.Core.Interfaces;
 /// (subject to the grace-period and circuit-breaker guardrails).</summary>
 public interface ILicenseGroupSyncEngine
 {
-    /// <summary>Run every configured mapping (each independently, so one halting never blocks others).</summary>
+    /// <summary>Run every license (each license reconciled over all its groups; one halting never
+    /// blocks others).</summary>
     Task<LicenseGroupSyncSummary> RunAsync(bool dryRun, CancellationToken cancellationToken = default);
 
-    /// <summary>Run a single mapping — used by the per-line "Rerun" affordance after a halt/error.</summary>
+    /// <summary>Re-run all groups of a single license — the per-line "Rerun" re-runs the whole
+    /// license reconcile (read union + the single write group).</summary>
+    Task<IReadOnlyList<LicenseGroupMappingResult>> RunLicenseAsync(int licenseId, bool dryRun, CancellationToken cancellationToken = default);
+
+    /// <summary>Run a single mapping. A single-group license behaves exactly as before; a read group
+    /// is reconciled as a one-element union.</summary>
     Task<LicenseGroupMappingResult> RunMappingAsync(GroupLicenseMapping mapping, bool dryRun, CancellationToken cancellationToken = default);
 }

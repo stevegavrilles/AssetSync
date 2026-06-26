@@ -33,8 +33,8 @@ public interface IMappingRepository
     Task DeleteGroupLicenseMappingAsync(int id, CancellationToken cancellationToken = default);
     Task UpdateGroupLicenseRunStatusAsync(int id, string status, string? error, CancellationToken cancellationToken = default);
 
-    // Grace-period / soft-delete state for license-seat removals
-    Task<IReadOnlyList<PendingRemoval>> GetPendingRemovalsAsync(int mappingId, CancellationToken cancellationToken = default);
-    Task UpsertPendingRemovalAsync(int mappingId, string subjectKey, CancellationToken cancellationToken = default);
-    Task ClearPendingRemovalAsync(int mappingId, string subjectKey, CancellationToken cancellationToken = default);
+    // Grace-period / soft-delete state for removals — keyed per Snipe-IT license (union grace).
+    Task<IReadOnlyList<PendingRemoval>> GetPendingRemovalsAsync(int licenseId, CancellationToken cancellationToken = default);
+    Task UpsertPendingRemovalAsync(int licenseId, string subjectKey, CancellationToken cancellationToken = default);
+    Task ClearPendingRemovalAsync(int licenseId, string subjectKey, CancellationToken cancellationToken = default);
 }

@@ -94,7 +94,7 @@ public class LicenseGroupSyncEngineTests
         h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Member("alice@x") });
         h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { Seat(1, 100), Seat(2, 200) }); // bob(200) is absent from the group
-        h.Repo.Setup(r => r.GetPendingRemovalsAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<PendingRemoval>());
+        h.Repo.Setup(r => r.GetPendingRemovalsAsync(10,It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<PendingRemoval>());
 
         var result = await h.Build().RunMappingAsync(Mapping(), dryRun: false);
 
@@ -102,7 +102,7 @@ public class LicenseGroupSyncEngineTests
         Assert.Equal(1, result.PendingNew);
         Assert.Equal(0, result.CheckedIn);
         h.Snipe.Verify(s => s.CheckinSeatAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
-        h.Repo.Verify(r => r.UpsertPendingRemovalAsync(1, "200", It.IsAny<CancellationToken>()), Times.Once);
+        h.Repo.Verify(r => r.UpsertPendingRemovalAsync(10,"200", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // 3b. Grace period — second consecutive absence reaches the threshold: removal happens.
@@ -115,15 +115,15 @@ public class LicenseGroupSyncEngineTests
         h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { Seat(1, 100), Seat(2, 200) });
         // bob already missed once
-        h.Repo.Setup(r => r.GetPendingRemovalsAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { new PendingRemoval { MappingId = 1, SubjectKey = "200", ConsecutiveMisses = 1 } });
+        h.Repo.Setup(r => r.GetPendingRemovalsAsync(10,It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { new PendingRemoval { LicenseId = 10, SubjectKey = "200", ConsecutiveMisses = 1 } });
 
         var result = await h.Build().RunMappingAsync(Mapping(), dryRun: false);
 
         Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
         Assert.Equal(1, result.CheckedIn);
         h.Snipe.Verify(s => s.CheckinSeatAsync(10, 2, It.IsAny<CancellationToken>()), Times.Once);
-        h.Repo.Verify(r => r.ClearPendingRemovalAsync(1, "200", It.IsAny<CancellationToken>()), Times.Once);
+        h.Repo.Verify(r => r.ClearPendingRemovalAsync(10,"200", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // 3c. A reappeared user clears their pending state and is not removed.
@@ -135,14 +135,14 @@ public class LicenseGroupSyncEngineTests
         h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Member("alice@x"), Member("bob@x") });
         h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { Seat(1, 100), Seat(2, 200) });
-        h.Repo.Setup(r => r.GetPendingRemovalsAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { new PendingRemoval { MappingId = 1, SubjectKey = "200", ConsecutiveMisses = 1 } });
+        h.Repo.Setup(r => r.GetPendingRemovalsAsync(10,It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { new PendingRemoval { LicenseId = 10, SubjectKey = "200", ConsecutiveMisses = 1 } });
 
         var result = await h.Build().RunMappingAsync(Mapping(), dryRun: false);
 
         Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
         h.Snipe.Verify(s => s.CheckinSeatAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
-        h.Repo.Verify(r => r.ClearPendingRemovalAsync(1, "200", It.IsAny<CancellationToken>()), Times.Once);
+        h.Repo.Verify(r => r.ClearPendingRemovalAsync(10,"200", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // 4. Circuit breaker: more than the per-mapping limit (20) would be removed -> halt, remove nothing.
@@ -246,14 +246,14 @@ public class LicenseGroupSyncEngineTests
         h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100) });
         h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { EntraMember("obj-alice@x"), EntraMember("obj-bob") }); // bob no longer licensed
-        h.Repo.Setup(r => r.GetPendingRemovalsAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<PendingRemoval>());
+        h.Repo.Setup(r => r.GetPendingRemovalsAsync(10,It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<PendingRemoval>());
 
         var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
 
         Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
         Assert.Equal(1, result.PendingNew);
         h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        h.Repo.Verify(r => r.UpsertPendingRemovalAsync(1, "obj-bob", It.IsAny<CancellationToken>()), Times.Once);
+        h.Repo.Verify(r => r.UpsertPendingRemovalAsync(10,"obj-bob", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Remove second consecutive miss: directory member is removed.
@@ -265,15 +265,15 @@ public class LicenseGroupSyncEngineTests
         h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100) });
         h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { EntraMember("obj-alice@x"), EntraMember("obj-bob") });
-        h.Repo.Setup(r => r.GetPendingRemovalsAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { new PendingRemoval { MappingId = 1, SubjectKey = "obj-bob", ConsecutiveMisses = 1 } });
+        h.Repo.Setup(r => r.GetPendingRemovalsAsync(10,It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { new PendingRemoval { LicenseId = 10, SubjectKey = "obj-bob", ConsecutiveMisses = 1 } });
 
         var result = await h.Build().RunMappingAsync(WriteMapping(), dryRun: false);
 
         Assert.Equal(LicenseGroupRunStatus.Ok, result.Status);
         Assert.Equal(1, result.Removed);
         h.Entra.Verify(e => e.RemoveGroupMemberAsync("g1", "obj-bob", It.IsAny<CancellationToken>()), Times.Once);
-        h.Repo.Verify(r => r.ClearPendingRemovalAsync(1, "obj-bob", It.IsAny<CancellationToken>()), Times.Once);
+        h.Repo.Verify(r => r.ClearPendingRemovalAsync(10,"obj-bob", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Resolve no-match: a licensed Snipe user with no Entra identity is skipped, and triggers no removal.
@@ -389,5 +389,87 @@ public class LicenseGroupSyncEngineTests
         h.Entra.Verify(e => e.AddGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         h.Entra.Verify(e => e.RemoveGroupMemberAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         h.Repo.Verify(r => r.UpsertPendingRemovalAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ===== Multi-group per license (read direction, union of read groups) =====
+
+    private static GroupLicenseMapping ReadGroup(int id, string groupId, string groupName) =>
+        new() { Id = id, EntraGroupId = groupId, EntraGroupName = groupName, SnipeItLicenseId = 10, ReadOnly = true };
+
+    // Two read groups for one license: a user in EITHER group is assigned the seat (union).
+    [Fact]
+    public async Task MultiGroup_UnionAssign_AssignsMembersFromEitherGroup()
+    {
+        var h = new Harness();
+        h.Repo.Setup(r => r.GetGroupLicenseMappingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { ReadGroup(1, "g1", "G1"), ReadGroup(2, "g2", "G2") });
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x"), User(200, "bob@x") });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Member("alice@x") });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g2", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Member("bob@x") });
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, null), Seat(2, null) });
+
+        var summary = await h.Build().RunAsync(dryRun: false);
+
+        Assert.DoesNotContain(summary.Mappings, m => m.Status == LicenseGroupRunStatus.Error);
+        h.Snipe.Verify(s => s.CheckoutSeatAsync(10, It.IsAny<int>(), 100, It.IsAny<CancellationToken>()), Times.Once);
+        h.Snipe.Verify(s => s.CheckoutSeatAsync(10, It.IsAny<int>(), 200, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // THE core multi-group case: a seat-holder present in a SIBLING read group is NOT revoked,
+    // even though they are absent from the other group.
+    [Fact]
+    public async Task MultiGroup_UserInSiblingGroup_IsNotRevoked()
+    {
+        var h = new Harness();
+        h.Repo.Setup(r => r.GetGroupLicenseMappingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { ReadGroup(1, "g1", "G1"), ReadGroup(2, "g2", "G2") });
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x"), User(200, "bob@x") });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Member("alice@x") }); // bob absent here
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g2", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Member("bob@x") });   // alice absent here
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100), Seat(2, 200) });
+
+        var summary = await h.Build().RunAsync(dryRun: false);
+
+        Assert.DoesNotContain(summary.Mappings, m => m.Status == LicenseGroupRunStatus.Error);
+        // Neither alice nor bob is checked in — each is held by the union.
+        h.Snipe.Verify(s => s.CheckinSeatAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        h.Repo.Verify(r => r.UpsertPendingRemovalAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // A failed read of ONE of the license's read groups blocks removals for the whole license.
+    [Fact]
+    public async Task MultiGroup_PartialRead_BlocksAllRemovals()
+    {
+        var h = new Harness();
+        h.Repo.Setup(r => r.GetGroupLicenseMappingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { ReadGroup(1, "g1", "G1"), ReadGroup(2, "g2", "G2") });
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x"), User(200, "bob@x") });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Member("alice@x") });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g2", It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("g2 page failed"));
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100), Seat(2, 200) }); // bob would be a candidate
+
+        var summary = await h.Build().RunAsync(dryRun: false);
+
+        Assert.Contains(summary.Mappings, m => m.Status == LicenseGroupRunStatus.Error);
+        // bob (200) is absent from the successfully-read g1, but g2 failed -> no removals at all.
+        h.Snipe.Verify(s => s.CheckinSeatAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Union empty across all read groups, but seats are assigned -> error/hold, never mass check-in.
+    [Fact]
+    public async Task MultiGroup_UnionEmptyWithSeatsAssigned_IsError_NoRemoval()
+    {
+        var h = new Harness();
+        h.Repo.Setup(r => r.GetGroupLicenseMappingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { ReadGroup(1, "g1", "G1"), ReadGroup(2, "g2", "G2") });
+        h.Snipe.Setup(s => s.GetUsersAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { User(100, "alice@x") });
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g1", It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<EntraUser>());
+        h.Entra.Setup(e => e.GetGroupMembersAsync("g2", It.IsAny<CancellationToken>())).ReturnsAsync(Array.Empty<EntraUser>());
+        h.Snipe.Setup(s => s.GetLicenseSeatsAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(new[] { Seat(1, 100) });
+
+        var summary = await h.Build().RunAsync(dryRun: false);
+
+        Assert.Contains(summary.Mappings, m => m.Status == LicenseGroupRunStatus.Error);
+        h.Snipe.Verify(s => s.CheckinSeatAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

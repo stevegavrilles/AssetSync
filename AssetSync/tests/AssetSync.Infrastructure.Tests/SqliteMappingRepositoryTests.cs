@@ -163,5 +163,72 @@ public class SqliteMappingRepositoryTests : IDisposable
         Assert.DoesNotContain(await _repo.GetGroupLicenseMappingsAsync(), m => m.EntraGroupId == "g-3");
     }
 
+    [Fact]
+    public async Task GroupLicenseMapping_SecondWriteGroupSameLicense_Throws()
+    {
+        await _repo.SaveGroupLicenseMappingAsync(new GroupLicenseMapping
+        {
+            EntraGroupId = "w-1", EntraGroupName = "Write A", SnipeItLicenseId = 50, ReadOnly = false
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _repo.SaveGroupLicenseMappingAsync(new GroupLicenseMapping
+            {
+                EntraGroupId = "w-2", EntraGroupName = "Write B", SnipeItLicenseId = 50, ReadOnly = false
+            }));
+        Assert.Contains("already has a write", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        // A read-only second group on the same license is fine.
+        await _repo.SaveGroupLicenseMappingAsync(new GroupLicenseMapping
+        {
+            EntraGroupId = "r-1", EntraGroupName = "Read A", SnipeItLicenseId = 50, ReadOnly = true
+        });
+        Assert.Equal(2, (await _repo.GetGroupLicenseMappingsAsync()).Count(m => m.SnipeItLicenseId == 50));
+    }
+
+    [Fact]
+    public async Task GroupLicenseMapping_WriteGroupSwap_Succeeds()
+    {
+        await _repo.SaveGroupLicenseMappingAsync(new GroupLicenseMapping
+        {
+            EntraGroupId = "sw-a", EntraGroupName = "Swap A", SnipeItLicenseId = 60, ReadOnly = false
+        });
+
+        // Turn the existing write group read-only, then a different group can become the write group.
+        var a = (await _repo.GetGroupLicenseMappingsAsync()).Single(m => m.EntraGroupId == "sw-a");
+        a.ReadOnly = true;
+        await _repo.SaveGroupLicenseMappingAsync(a);
+
+        await _repo.SaveGroupLicenseMappingAsync(new GroupLicenseMapping
+        {
+            EntraGroupId = "sw-b", EntraGroupName = "Swap B", SnipeItLicenseId = 60, ReadOnly = false
+        });
+
+        var groups = (await _repo.GetGroupLicenseMappingsAsync()).Where(m => m.SnipeItLicenseId == 60).ToList();
+        Assert.Single(groups, m => !m.ReadOnly);
+        Assert.Equal("sw-b", groups.Single(m => !m.ReadOnly).EntraGroupId);
+    }
+
+    [Fact]
+    public async Task PendingRemoval_IsKeyedPerLicense()
+    {
+        await _repo.UpsertPendingRemovalAsync(70, "user-1");
+        var l70 = await _repo.GetPendingRemovalsAsync(70);
+        Assert.Single(l70);
+        Assert.Equal(70, l70[0].LicenseId);
+        Assert.Equal(1, l70[0].ConsecutiveMisses);
+
+        // Same subject under a different license is independent.
+        await _repo.UpsertPendingRemovalAsync(80, "user-1");
+        await _repo.UpsertPendingRemovalAsync(70, "user-1"); // 70 now at 2
+
+        Assert.Equal(2, (await _repo.GetPendingRemovalsAsync(70)).Single().ConsecutiveMisses);
+        Assert.Equal(1, (await _repo.GetPendingRemovalsAsync(80)).Single().ConsecutiveMisses);
+
+        await _repo.ClearPendingRemovalAsync(70, "user-1");
+        Assert.Empty(await _repo.GetPendingRemovalsAsync(70));
+        Assert.Single(await _repo.GetPendingRemovalsAsync(80)); // unaffected
+    }
+
     public void Dispose() => _db.Dispose();
 }

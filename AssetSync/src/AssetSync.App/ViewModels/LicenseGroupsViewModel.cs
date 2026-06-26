@@ -83,6 +83,18 @@ public partial class LicenseGroupsViewModel : ObservableObject
 
         if (switchingToWrite)
         {
+            // At most one write/provisioning group per license.
+            var existingWriteGroup = FindWriteGroupName(row.Mapping.SnipeItLicenseId, row.Id);
+            if (existingWriteGroup != null)
+            {
+                MessageBox.Show(
+                    $"License already has a write/provisioning group: {existingWriteGroup}.\n\n" +
+                    "Only one write group per license is allowed. Set that group back to read-only first " +
+                    "if you want this one to be the write group.",
+                    "Cannot enable write mode", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var answer = MessageBox.Show(
                 $"Switch \"{row.GroupName}\" to WRITE mode (Snipe-IT → Entra)?\n\n" +
                 "In write mode this app PROVISIONS and DEPROVISIONS Entra group membership: users " +
@@ -143,6 +155,17 @@ public partial class LicenseGroupsViewModel : ObservableObject
             return;
         }
 
+        // At most one write/provisioning group per license.
+        if (!NewReadOnly)
+        {
+            var existingWriteGroup = FindWriteGroupName(SelectedLicense.Id, excludeRowId: -1);
+            if (existingWriteGroup != null)
+            {
+                StatusMessage = $"License already has a write/provisioning group: {existingWriteGroup}. Add this group as read-only, or change the existing one first.";
+                return;
+            }
+        }
+
         IsLoading = true;
         try
         {
@@ -158,7 +181,7 @@ public partial class LicenseGroupsViewModel : ObservableObject
                 {
                     groupName = string.IsNullOrEmpty(info.DisplayName) ? groupName : info.DisplayName;
                     if (!info.IsMembershipWritable)
-                        warning = "group is dynamic (not membership-writable) — fine for read-only, but it cannot be used for the Phase 2 write direction";
+                        warning = "group is dynamic (not membership-writable) — fine for read-only, but it cannot be used as the write/provisioning group";
                 }
             }
             catch (Exception ex)
@@ -234,12 +257,17 @@ public partial class LicenseGroupsViewModel : ObservableObject
     {
         if (row == null) return;
         IsLoading = true;
-        StatusMessage = $"Re-running '{row.GroupName}'...";
+        StatusMessage = $"Re-running license for '{row.GroupName}'...";
         try
         {
-            var result = await _engine.RunMappingAsync(row.Mapping, dryRun: false);
-            row.ApplyResult(result);
-            StatusMessage = $"'{row.GroupName}': {result.StatusText} — {result.Message}";
+            // Rerun re-runs the WHOLE license reconcile (read union + the single write group).
+            var results = await _engine.RunLicenseAsync(row.Mapping.SnipeItLicenseId, dryRun: false);
+            foreach (var r in results)
+            {
+                var target = Mappings.FirstOrDefault(m => m.Id == r.MappingId);
+                target?.ApplyResult(r);
+            }
+            StatusMessage = $"Re-ran license for '{row.GroupName}': {results.Count} group(s) processed.";
         }
         catch (Exception ex)
         {
@@ -250,4 +278,9 @@ public partial class LicenseGroupsViewModel : ObservableObject
             IsLoading = false;
         }
     }
+
+    /// <summary>Returns the name of an existing write/provisioning group on the license (other than
+    /// <paramref name="excludeRowId"/>), or null if none — enforces one write group per license.</summary>
+    private string? FindWriteGroupName(int licenseId, int excludeRowId) =>
+        Mappings.FirstOrDefault(m => m.Id != excludeRowId && m.Mapping.SnipeItLicenseId == licenseId && !m.ReadOnly)?.GroupName;
 }

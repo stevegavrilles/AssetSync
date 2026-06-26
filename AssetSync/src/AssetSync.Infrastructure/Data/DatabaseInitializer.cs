@@ -95,17 +95,52 @@ public class DatabaseInitializer
                 last_error TEXT
             );");
 
+        // At most one write/provisioning (read_only = 0) group per license — partial unique index.
+        Execute(conn, @"
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_glm_one_write_group_per_license
+                ON group_license_mappings(snipeit_license_id) WHERE read_only = 0;");
+
+        // Grace-period state is keyed per (license, subject) so a user present in any sibling read
+        // group of the license is not counted as a removal miss. Older builds keyed this per
+        // mapping_id; these rows are transient grace counters, so a clean re-create is safe.
+        MigratePendingRemovalsToLicenseKey(conn);
         Execute(conn, @"
             CREATE TABLE IF NOT EXISTS license_group_pending_removals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                mapping_id INTEGER NOT NULL,
+                snipeit_license_id INTEGER NOT NULL,
                 subject_key TEXT NOT NULL,
                 consecutive_misses INTEGER NOT NULL DEFAULT 1,
                 first_missed_utc TEXT NOT NULL,
-                UNIQUE(mapping_id, subject_key)
+                UNIQUE(snipeit_license_id, subject_key)
             );");
 
         SeedDefaultBuildMappings(conn);
+    }
+
+    // Drops the pending-removals table if it still uses the old per-mapping_id schema, so the
+    // CREATE below re-creates it with the per-license key. Transient grace counters only — no
+    // user-visible data is lost; in-flight counters simply restart at zero on the next sync.
+    private static void MigratePendingRemovalsToLicenseKey(SqliteConnection conn)
+    {
+        var exists = false;
+        var hasLicenseColumn = false;
+        using (var info = conn.CreateCommand())
+        {
+            info.CommandText = "PRAGMA table_info(license_group_pending_removals)";
+            using var reader = info.ExecuteReader();
+            while (reader.Read())
+            {
+                exists = true;
+                if (string.Equals(reader.GetString(1), "snipeit_license_id", StringComparison.OrdinalIgnoreCase))
+                    hasLicenseColumn = true;
+            }
+        }
+        if (exists && !hasLicenseColumn)
+        {
+            using var drop = conn.CreateCommand();
+            drop.CommandText = "DROP TABLE license_group_pending_removals";
+            drop.ExecuteNonQuery();
+        }
     }
 
     private static void Execute(SqliteConnection conn, string sql)

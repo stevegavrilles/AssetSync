@@ -202,6 +202,20 @@ public class SqliteMappingRepository : IMappingRepository
     {
         await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        // Enforce at most one write/provisioning (read_only = 0) group per license, with a friendly
+        // message ahead of the partial unique index backstop.
+        if (!mapping.ReadOnly)
+        {
+            await using var check = conn.CreateCommand();
+            check.CommandText = "SELECT entra_group_name FROM group_license_mappings WHERE snipeit_license_id = $lid AND read_only = 0 AND id != $id LIMIT 1";
+            check.Parameters.AddWithValue("$lid", mapping.SnipeItLicenseId);
+            check.Parameters.AddWithValue("$id", mapping.Id);
+            var existing = await check.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (existing is string existingName)
+                throw new InvalidOperationException($"License already has a write/provisioning group: {existingName}");
+        }
+
         await using var cmd = conn.CreateCommand();
         if (mapping.Id > 0)
         {
@@ -226,19 +240,12 @@ public class SqliteMappingRepository : IMappingRepository
     {
         await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
-        // Remove the mapping and any grace-period state tied to it.
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "DELETE FROM group_license_mappings WHERE id = $id";
-            cmd.Parameters.AddWithValue("$id", id);
-            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "DELETE FROM license_group_pending_removals WHERE mapping_id = $id";
-            cmd.Parameters.AddWithValue("$id", id);
-            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
+        // Grace state is keyed per license (shared across the license's groups), so deleting one
+        // group does not remove it; any orphaned counters are transient and self-heal on next sync.
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM group_license_mappings WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task UpdateGroupLicenseRunStatusAsync(int id, string status, string? error, CancellationToken cancellationToken = default)
@@ -255,20 +262,20 @@ public class SqliteMappingRepository : IMappingRepository
 
     // --- Grace-period / soft-delete state ---
 
-    public async Task<IReadOnlyList<PendingRemoval>> GetPendingRemovalsAsync(int mappingId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PendingRemoval>> GetPendingRemovalsAsync(int licenseId, CancellationToken cancellationToken = default)
     {
         await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT mapping_id, subject_key, consecutive_misses, first_missed_utc FROM license_group_pending_removals WHERE mapping_id = $mid";
-        cmd.Parameters.AddWithValue("$mid", mappingId);
+        cmd.CommandText = "SELECT snipeit_license_id, subject_key, consecutive_misses, first_missed_utc FROM license_group_pending_removals WHERE snipeit_license_id = $lid";
+        cmd.Parameters.AddWithValue("$lid", licenseId);
         var list = new List<PendingRemoval>();
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             list.Add(new PendingRemoval
             {
-                MappingId = reader.GetInt32(0),
+                LicenseId = reader.GetInt32(0),
                 SubjectKey = reader.GetString(1),
                 ConsecutiveMisses = reader.GetInt32(2),
                 FirstMissedUtc = DateTimeOffset.TryParse(reader.GetString(3), out var dt) ? dt : DateTimeOffset.UtcNow
@@ -277,27 +284,27 @@ public class SqliteMappingRepository : IMappingRepository
         return list;
     }
 
-    public async Task UpsertPendingRemovalAsync(int mappingId, string subjectKey, CancellationToken cancellationToken = default)
+    public async Task UpsertPendingRemovalAsync(int licenseId, string subjectKey, CancellationToken cancellationToken = default)
     {
         await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"INSERT INTO license_group_pending_removals (mapping_id, subject_key, consecutive_misses, first_missed_utc)
-            VALUES ($mid, $key, 1, $now)
-            ON CONFLICT(mapping_id, subject_key) DO UPDATE SET consecutive_misses = consecutive_misses + 1";
-        cmd.Parameters.AddWithValue("$mid", mappingId);
+        cmd.CommandText = @"INSERT INTO license_group_pending_removals (snipeit_license_id, subject_key, consecutive_misses, first_missed_utc)
+            VALUES ($lid, $key, 1, $now)
+            ON CONFLICT(snipeit_license_id, subject_key) DO UPDATE SET consecutive_misses = consecutive_misses + 1";
+        cmd.Parameters.AddWithValue("$lid", licenseId);
         cmd.Parameters.AddWithValue("$key", subjectKey);
         cmd.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("o"));
         await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task ClearPendingRemovalAsync(int mappingId, string subjectKey, CancellationToken cancellationToken = default)
+    public async Task ClearPendingRemovalAsync(int licenseId, string subjectKey, CancellationToken cancellationToken = default)
     {
         await using var conn = new SqliteConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM license_group_pending_removals WHERE mapping_id = $mid AND subject_key = $key";
-        cmd.Parameters.AddWithValue("$mid", mappingId);
+        cmd.CommandText = "DELETE FROM license_group_pending_removals WHERE snipeit_license_id = $lid AND subject_key = $key";
+        cmd.Parameters.AddWithValue("$lid", licenseId);
         cmd.Parameters.AddWithValue("$key", subjectKey);
         await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }

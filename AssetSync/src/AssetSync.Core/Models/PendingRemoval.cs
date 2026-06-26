@@ -6,7 +6,9 @@ namespace AssetSync.Core.Models;
 /// successful syncs; a reappearance clears the row.</summary>
 public class PendingRemoval
 {
-    public int MappingId { get; set; }
+    /// <summary>The Snipe-IT license the grace state belongs to. Keyed per license (not per group)
+    /// so a user present in any sibling read group of the license is not counted as a miss.</summary>
+    public int LicenseId { get; set; }
     public string SubjectKey { get; set; } = "";
     public int ConsecutiveMisses { get; set; }
     public DateTimeOffset FirstMissedUtc { get; set; }
